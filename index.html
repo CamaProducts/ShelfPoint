@@ -818,8 +818,8 @@
       renderDetailSidebar(fromDealerName, fromAccno, 'stocklookup')
     } else {
       sidebar.innerHTML = sidebarChrome(`
-        <div class="nav-item ${repFilter !== 'all' ? 'active' : ''}" id="navMyDealers">My Dealers</div>
-        <div class="nav-item ${repFilter === 'all' ? 'active' : ''}" id="navAllDealers">All Dealers</div>
+        <div class="nav-item" id="navMyDealers">My Dealers</div>
+        <div class="nav-item" id="navAllDealers">All Dealers</div>
         <div class="nav-item active" id="navStockLookup">Stock Lookup</div>
       `)
       wireLogout()
