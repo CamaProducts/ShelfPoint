@@ -98,9 +98,15 @@
   .nav-item.active { color: #fff; border-left-color: var(--lime); background: rgba(255,255,255,0.08); font-weight: 600; }
   .nav-item.disabled { color: rgba(255,255,255,0.35); cursor: default; }
   .nav-item.disabled:hover { background: none; color: rgba(255,255,255,0.35); }
+  .dealer-context-group {
+    background: rgba(181,211,52,0.07);
+    border-left: 3px solid var(--lime);
+    margin: 6px 0;
+    padding-bottom: 4px;
+  }
   .nav-section-label {
-    padding: 14px 18px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;
-    letter-spacing: 0.06em; color: rgba(255,255,255,0.35);
+    padding: 14px 18px 6px; font-size: 12px; font-weight: 700;
+    letter-spacing: 0.02em; color: var(--lime);
   }
   .sidebar-footer { padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.1); }
 
@@ -685,6 +691,7 @@
     sidebar.innerHTML = sidebarChrome(`
       <div class="nav-item ${repFilter !== 'all' ? 'active' : ''}" id="navMyDealers">My Dealers</div>
       <div class="nav-item ${repFilter === 'all' ? 'active' : ''}" id="navAllDealers">All Dealers</div>
+      <div class="nav-item" id="navStockLookup">Stock Lookup</div>
     `)
     wireLogout()
     document.getElementById('navMyDealers').onclick = () => {
@@ -693,6 +700,7 @@
     document.getElementById('navAllDealers').onclick = () => {
       repFilter = 'all'; renderAccountsList()
     }
+    document.getElementById('navStockLookup').onclick = () => renderStockLookup()
 
     topbarTitle.textContent = 'Accounts'
     topbarSubtitle.textContent = `${sorted.length} account${sorted.length === 1 ? '' : 's'}`
@@ -803,6 +811,78 @@
     }
   }
 
+  // ---------- STOCK LOOKUP (top-level, not tied to any dealer) ----------
+  function renderStockLookup(fromAccno, fromDealerName) {
+    document.getElementById('listHeaderRow').style.display = 'none'
+    if (fromAccno) {
+      renderDetailSidebar(fromDealerName, fromAccno, 'stocklookup')
+    } else {
+      sidebar.innerHTML = sidebarChrome(`
+        <div class="nav-item ${repFilter !== 'all' ? 'active' : ''}" id="navMyDealers">My Dealers</div>
+        <div class="nav-item ${repFilter === 'all' ? 'active' : ''}" id="navAllDealers">All Dealers</div>
+        <div class="nav-item active" id="navStockLookup">Stock Lookup</div>
+      `)
+      wireLogout()
+      document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
+      document.getElementById('navAllDealers').onclick = () => { repFilter = 'all'; renderAccountsList() }
+      document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+    }
+
+    topbarTitle.textContent = 'Stock Lookup'
+    topbarSubtitle.textContent = fromDealerName ? `For ${fromDealerName}'s visit` : 'Wholegoods stock on hand'
+    topbarRight.innerHTML = ''
+
+    content.innerHTML = `
+      <div class="detail-section">
+        <h2>Search wholegoods by part number or description</h2>
+        <div class="search-wrap" style="max-width: 480px;">
+          <input class="search-input" id="stockLookupSearch" type="text" placeholder="Search" style="width:100%;">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </div>
+        <div class="acc-sub" style="margin-top:8px;">Stock levels as of 8am sync - not live.</div>
+        <div id="stockLookupResults" style="margin-top:16px;"></div>
+      </div>
+    `
+
+    let searchTimeout = null
+    document.getElementById('stockLookupSearch').addEventListener('input', (e) => {
+      clearTimeout(searchTimeout)
+      const q = e.target.value.trim()
+      const resultsEl = document.getElementById('stockLookupResults')
+      if (q.length < 2) { resultsEl.innerHTML = ''; return }
+      searchTimeout = setTimeout(async () => {
+        resultsEl.innerHTML = `<div class="empty-state">Searching…</div>`
+        const { data, error } = await supabase
+          .from('stock_items')
+          .select('stockcode, description, soh')
+          .eq('stockgroup2', 2)
+          .eq('is_active', true)
+          .or(`stockcode.ilike.%${q}%,description.ilike.%${q}%`)
+          .order('description')
+          .limit(30)
+        if (error) { resultsEl.innerHTML = `<div class="empty-state">Search failed: ${error.message}</div>`; return }
+        if (!data || data.length === 0) { resultsEl.innerHTML = `<div class="placeholder-note">No wholegoods match "${q}".</div>`; return }
+        resultsEl.innerHTML = `
+          <table class="detail-table">
+            <thead><tr><th>Part number</th><th>Description</th><th>Stock on hand</th></tr></thead>
+            <tbody>${data.map(item => {
+              const inStock = Number(item.soh) > 0
+              return `
+              <tr style="background:${inStock ? 'var(--ok-tint)' : 'var(--err-tint)'};">
+                <td>${item.stockcode}</td>
+                <td>${item.description || '—'}</td>
+                <td style="font-weight:700; color:${inStock ? 'var(--ok)' : 'var(--err)'};">${item.soh != null ? Number(item.soh) : '—'}</td>
+              </tr>`}).join('')}
+            </tbody>
+          </table>
+        `
+      }, 300)
+    })
+  }
+
   async function showAccountDetail(accno) {
     resetVisitIfNewDealer(accno)
     document.getElementById('listHeaderRow').style.display = 'none'
@@ -838,16 +918,20 @@
   function renderDetailSidebar(dealerName, accno, activeTab) {
     sidebar.innerHTML = sidebarChrome(`
       <div class="nav-item" id="navBackToAccounts">← Back to Accounts</div>
-      <div class="nav-section-label">${dealerName || 'Account'}</div>
-      <div class="nav-item ${activeTab === 'overview' ? 'active' : ''}" id="navOverview">Overview</div>
-      <div class="nav-item ${activeTab === 'wholegoods' ? 'active' : ''}" id="navWholegoods">Wholegoods &amp; ranges</div>
-      <div class="nav-item ${activeTab === 'callnotes' ? 'active' : ''}" id="navCallNotes">Call notes</div>
+      <div class="dealer-context-group">
+        <div class="nav-section-label">${dealerName || 'Account'}</div>
+        <div class="nav-item ${activeTab === 'overview' ? 'active' : ''}" id="navOverview">Overview</div>
+        <div class="nav-item ${activeTab === 'wholegoods' ? 'active' : ''}" id="navWholegoods">Wholegoods &amp; ranges</div>
+        <div class="nav-item ${activeTab === 'callnotes' ? 'active' : ''}" id="navCallNotes">Call notes</div>
+        <div class="nav-item ${activeTab === 'stocklookup' ? 'active' : ''}" id="navStockLookupDetail">Stock Lookup</div>
+      </div>
     `)
     wireLogout()
     document.getElementById('navBackToAccounts').onclick = () => renderAccountsList()
     document.getElementById('navOverview').onclick = () => showAccountDetail(accno)
     document.getElementById('navWholegoods').onclick = () => showWholegoodsTab(accno)
     document.getElementById('navCallNotes').onclick = () => showCallNotesTab(accno)
+    document.getElementById('navStockLookupDetail').onclick = () => renderStockLookup(accno, dealerName)
   }
 
   function renderAccountDetail(dealer, accno, monthly, variance, discounts, specials) {
