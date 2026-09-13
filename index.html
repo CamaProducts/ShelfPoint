@@ -34,6 +34,8 @@
     font-size: 14px;
     -webkit-tap-highlight-color: transparent;
   }
+  a { color: var(--navy); text-decoration: none; }
+  a:hover { text-decoration: underline; }
 
   /* ============ LOGIN (chrome-free, own screen) ============ */
   .login-screen {
@@ -134,7 +136,7 @@
   /* ============ ACCOUNTS LIST (card rows) ============ */
   .list-header-row {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr;
     gap: 14px;
     padding: 12px 46px;
     background: var(--surface);
@@ -150,7 +152,7 @@
   .list-header-row .col.right { text-align: right; }
   .account-row {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr;
     gap: 14px;
     align-items: center;
     background: var(--paper);
@@ -195,6 +197,21 @@
   .chart-bar.ly { background: #A9B2C4; }
   .chart-month-label { font-size: 11px; color: var(--slate-dim); }
   .chart-legend { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--slate); align-items: center; }
+  .ytd-quarterly-row {
+    display: flex; gap: 10px; margin-top: 14px; padding-top: 14px;
+    border-top: 1px solid var(--border); flex-wrap: wrap;
+  }
+  .ytd-quarterly-pill {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    background: var(--surface); border-radius: 8px; padding: 8px 14px;
+  }
+  .yq-label { font-size: 11px; color: var(--slate-dim); font-weight: 600; }
+  .sort-mode-toggle { display: flex; gap: 4px; background: var(--surface); border-radius: 8px; padding: 3px; }
+  .sort-mode-btn {
+    border: none; background: none; padding: 6px 12px; font-size: 12px; font-weight: 600;
+    color: var(--slate); border-radius: 6px; cursor: pointer;
+  }
+  .sort-mode-btn.active { background: var(--paper); color: var(--navy); box-shadow: 0 1px 2px rgba(0,0,0,0.08); }
   .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
   .legend-dot.ty { background: var(--navy); }
   .legend-dot.ly { background: #A9B2C4; }
@@ -272,8 +289,15 @@
     padding: 12px 16px; margin-bottom: 14px;
   }
   .add-line-form input {
-    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; width: 100%;
   }
+  .stock-search-results {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+    background: var(--paper); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12); max-height: 220px; overflow-y: auto;
+  }
+  .stock-search-result { padding: 9px 12px; font-size: 13px; cursor: pointer; }
+  .stock-search-result:hover { background: var(--surface); }
   .send-report-bar {
     display: flex; align-items: center; justify-content: space-between;
     margin-top: 10px; padding-top: 14px; border-top: 1px solid var(--border);
@@ -548,10 +572,31 @@
     return `<span class="variance-badge variance-steady">${rounded}%</span>`
   }
 
+  function dollarChangeBadge(value) {
+    if (value === null || value === undefined) return `<span class="variance-badge variance-steady">New</span>`
+    const rounded = Math.round(Number(value))
+    const formatted = '$' + Math.abs(rounded).toLocaleString()
+    if (rounded > 0) return `<span class="variance-badge variance-up">+${formatted}</span>`
+    if (rounded < 0) return `<span class="variance-badge variance-down">-${formatted}</span>`
+    return `<span class="variance-badge variance-steady">${formatted}</span>`
+  }
+
   function compactCurrency(v) {
     const n = Number(v)
     if (n >= 1000) return '$' + (n / 1000).toFixed(1) + 'k'
     return '$' + Math.round(n)
+  }
+
+  // NZ date style (DD/MM/YYYY) - never rely on the browser's own
+  // locale formatting, which often defaults to US style.
+  function formatNZDate(dateInput) {
+    if (!dateInput) return ''
+    const d = new Date(dateInput)
+    if (isNaN(d.getTime())) return ''
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const yyyy = d.getFullYear()
+    return `${dd}/${mm}/${yyyy}`
   }
 
   // Stock groups to hide from the picker entirely, and a rule for
@@ -635,6 +680,7 @@
     if (sort === 'name') copy.sort((a, b) => dir * a.name.localeCompare(b.name))
     if (sort === 'rep') copy.sort((a, b) => dir * (a.rep_name || '').localeCompare(b.rep_name || ''))
     if (sort === 'variance') copy.sort((a, b) => dir * ((a.variance_pct ?? 999) - (b.variance_pct ?? 999)))
+    if (sort === 'ytd') copy.sort((a, b) => dir * ((a.rolling12_change ?? 0) - (b.rolling12_change ?? 0)))
     if (sort === 'last_order') copy.sort((a, b) => {
       if (!a.last_order_date) return -1 * dir
       if (!b.last_order_date) return 1 * dir
@@ -683,6 +729,7 @@
             <div class="col right">${daysAgoLabel(d.last_order_date)}</div>
             <div class="col right">${daysAgoLabel(d.last_visit_date, '—')}</div>
             <div class="col right">${varianceBadge(d.variance_pct)}</div>
+            <div class="col right">${dollarChangeBadge(d.rolling12_change)}</div>
           </div>
         `).join('')
 
@@ -722,6 +769,7 @@
       <div class="col right ${currentSort === 'last_order' ? 'sorted' : ''}" data-sort="last_order">Last order${sortArrow('last_order')}</div>
       <div class="col right ${currentSort === 'last_visit' ? 'sorted' : ''}" data-sort="last_visit">Last visit${sortArrow('last_visit')}</div>
       <div class="col right ${currentSort === 'variance' ? 'sorted' : ''}" data-sort="variance">Variance vs last year${sortArrow('variance')}</div>
+      <div class="col right ${currentSort === 'ytd' ? 'sorted' : ''}" data-sort="ytd">Last 12mo Change${sortArrow('ytd')}</div>
     `
     listHeaderRow.querySelectorAll('.col[data-sort]').forEach(col => {
       col.addEventListener('click', () => {
@@ -784,6 +832,7 @@
   let visibleGains = 10
   let visibleDeclines = 10
   let visibleSpecials = 5
+  let gainsDeclinesSortMode = 'value' // 'value' | 'units' | 'percent'
   let allStockGroups = null
   let selectedRefs = [] // canonical ref strings, not raw groupnos - one combined entry counts as one pick
   let categoryResults = []
@@ -808,6 +857,86 @@
       wholegoodsInitialized = false
       currentCallNotes = ''
       callNotesInitialized = false
+    }
+  }
+
+  // ---------- CONTACTS ----------
+  async function showContactsTab(accno) {
+    resetVisitIfNewDealer(accno)
+    document.getElementById('listHeaderRow').style.display = 'none'
+    const dealer = currentDealers.find(d => d.accno === accno)
+    renderDetailSidebar(dealer ? dealer.name : null, accno, 'contacts')
+    topbarTitle.textContent = dealer ? dealer.name : 'Account'
+    topbarSubtitle.textContent = `Account #${accno}`
+    topbarRight.innerHTML = ''
+    content.innerHTML = `<div class="empty-state">Loading…</div>`
+
+    const [
+      { data: primary, error: primaryErr },
+      { data: extras, error: extrasErr },
+    ] = await Promise.all([
+      supabase.from('dealers').select('address1, address2, address3, post_code, phone, email').eq('accno', accno).single(),
+      supabase.from('dealer_contacts').select('*').eq('accno', accno).order('added_date', { ascending: false }),
+    ])
+    if (primaryErr || extrasErr) {
+      const err = primaryErr || extrasErr
+      content.innerHTML = `<div class="empty-state">Couldn't load contacts: ${err.message}</div>`
+      return
+    }
+    renderContactsPage(accno, dealer ? dealer.name : `Account #${accno}`, primary, extras || [])
+  }
+
+  function renderContactsPage(accno, dealerName, primary, extras) {
+    const addressLines = [primary?.address1, primary?.address2, primary?.address3, primary?.post_code]
+      .filter(Boolean).join(', ') || 'No address on record'
+
+    const extrasHtml = extras.length === 0
+      ? `<div class="placeholder-note">No additional contacts recorded yet.</div>`
+      : extras.map(c => `
+          <div class="recent-call-card">
+            <div class="stock-line-title">${c.name || 'Unnamed contact'}${c.role ? ' — ' + c.role : ''}</div>
+            <div class="acc-sub">${[c.phone, c.email ? `<a href="mailto:${c.email}">${c.email}</a>` : null].filter(Boolean).join(' · ') || 'No phone/email on record'}</div>
+            ${c.notes ? `<div class="acc-sub" style="margin-top:4px;">${c.notes}</div>` : ''}
+            <div class="recent-call-meta" style="margin-top:4px;">Added by ${c.added_by || 'unknown'} on ${formatNZDate(c.added_date)}</div>
+          </div>
+        `).join('')
+
+    content.innerHTML = `
+      <div class="detail-section">
+        <h2>Primary details (from EXO)</h2>
+        <div class="report-summary">${addressLines}</div>
+        <div class="report-summary" style="margin-top:6px;">${primary?.phone || 'No phone on record'} · ${primary?.email ? `<a href="mailto:${primary.email}">${primary.email}</a>` : 'No email on record'}</div>
+      </div>
+      <div class="detail-section">
+        <h2>Additional contacts</h2>
+        ${extrasHtml}
+        <div class="add-line-form" style="grid-template-columns: 1fr 1fr 1fr 1fr auto; margin-top:14px;">
+          <input id="contactName" placeholder="Name">
+          <input id="contactRole" placeholder="Role">
+          <input id="contactPhone" placeholder="Phone">
+          <input id="contactEmail" placeholder="Email">
+          <button class="confirm-btn" id="addContactBtn">Add</button>
+        </div>
+        <input id="contactNotes" class="stock-line-note" style="width:100%; margin-top:10px;" placeholder="Notes (optional)">
+      </div>
+    `
+
+    document.getElementById('addContactBtn').onclick = async () => {
+      const name = document.getElementById('contactName').value.trim()
+      if (!name) { alert('Enter at least a name before adding a contact.'); return }
+      const btn = document.getElementById('addContactBtn')
+      btn.disabled = true
+      const { error } = await supabase.from('dealer_contacts').insert({
+        accno,
+        name,
+        role: document.getElementById('contactRole').value,
+        phone: document.getElementById('contactPhone').value,
+        email: document.getElementById('contactEmail').value,
+        notes: document.getElementById('contactNotes').value,
+        added_by: currentUserLabel,
+      })
+      if (error) { alert('Could not save contact: ' + error.message); btn.disabled = false; return }
+      showContactsTab(accno)
     }
   }
 
@@ -892,6 +1021,7 @@
     visibleGains = 10
     visibleDeclines = 10
     visibleSpecials = 5
+    gainsDeclinesSortMode = 'value'
     selectedRefs = []
     categoryResults = []
 
@@ -900,19 +1030,21 @@
       { data: variance, error: varianceErr },
       { data: discounts, error: discountsErr },
       { data: specials, error: specialsErr },
+      { data: ytdQuarterly, error: ytdErr },
     ] = await Promise.all([
       supabase.rpc('get_monthly_spend', { p_accno: accno }),
       supabase.rpc('get_product_variance', { p_accno: accno }),
       supabase.rpc('get_dealer_price_policies', { p_accno: accno }),
       supabase.rpc('get_relevant_specials', { p_accno: accno }),
+      supabase.rpc('get_ytd_and_quarterly', { p_accno: accno }),
     ])
 
-    if (monthlyErr || varianceErr || discountsErr || specialsErr) {
-      const err = monthlyErr || varianceErr || discountsErr || specialsErr
+    if (monthlyErr || varianceErr || discountsErr || specialsErr || ytdErr) {
+      const err = monthlyErr || varianceErr || discountsErr || specialsErr || ytdErr
       content.innerHTML = `<div class="empty-state">Couldn't load account detail: ${err.message}</div>`
       return
     }
-    renderAccountDetail(dealer, accno, monthly || [], variance || [], discounts || [], specials || [])
+    renderAccountDetail(dealer, accno, monthly || [], variance || [], discounts || [], specials || [], ytdQuarterly || [])
   }
 
   function renderDetailSidebar(dealerName, accno, activeTab) {
@@ -923,6 +1055,7 @@
         <div class="nav-item ${activeTab === 'overview' ? 'active' : ''}" id="navOverview">Overview</div>
         <div class="nav-item ${activeTab === 'wholegoods' ? 'active' : ''}" id="navWholegoods">Wholegoods &amp; ranges</div>
         <div class="nav-item ${activeTab === 'callnotes' ? 'active' : ''}" id="navCallNotes">Call notes</div>
+        <div class="nav-item ${activeTab === 'contacts' ? 'active' : ''}" id="navContacts">Contacts</div>
         <div class="nav-item ${activeTab === 'stocklookup' ? 'active' : ''}" id="navStockLookupDetail">Stock Lookup</div>
       </div>
     `)
@@ -931,10 +1064,11 @@
     document.getElementById('navOverview').onclick = () => showAccountDetail(accno)
     document.getElementById('navWholegoods').onclick = () => showWholegoodsTab(accno)
     document.getElementById('navCallNotes').onclick = () => showCallNotesTab(accno)
+    document.getElementById('navContacts').onclick = () => showContactsTab(accno)
     document.getElementById('navStockLookupDetail').onclick = () => renderStockLookup(accno, dealerName)
   }
 
-  function renderAccountDetail(dealer, accno, monthly, variance, discounts, specials) {
+  function renderAccountDetail(dealer, accno, monthly, variance, discounts, specials, ytdQuarterly) {
     renderDetailSidebar(dealer ? dealer.name : null, accno, 'overview')
     topbarTitle.textContent = dealer ? dealer.name : 'Account'
     topbarSubtitle.textContent = `Account #${accno}`
@@ -953,9 +1087,19 @@
       </div>
     `).join('')
 
-    const ranked = variance.filter(v => v.variance_pct !== null)
-    const gains = [...ranked].sort((a, b) => b.variance_pct - a.variance_pct).slice(0, 20)
-    const declines = [...ranked].sort((a, b) => a.variance_pct - b.variance_pct).slice(0, 20)
+    const ranked = variance.filter(v => v.variance_pct !== null).map(v => ({
+      ...v,
+      dollar_change: Number(v.recent_total) - Number(v.prior_total),
+      unit_change: Number(v.recent_qty) - Number(v.prior_qty),
+    }))
+    function sortKeyFor(mode) {
+      if (mode === 'units') return 'unit_change'
+      if (mode === 'percent') return 'variance_pct'
+      return 'dollar_change'
+    }
+    const sortKey = sortKeyFor(gainsDeclinesSortMode)
+    const gains = [...ranked].sort((a, b) => b[sortKey] - a[sortKey]).slice(0, 20)
+    const declines = [...ranked].sort((a, b) => a[sortKey] - b[sortKey]).slice(0, 20)
 
     function varianceTable(list, visibleCount, onSeeMore) {
       if (list.length === 0) return `<div class="empty-state">Nothing to show yet.</div>`
@@ -1034,6 +1178,14 @@
         <h2>Monthly spend — this year vs last year</h2>
         <div class="chart"><div class="chart-bars-row">${bars}</div></div>
         <div class="chart-legend"><span class="legend-dot ty"></span>This year<span style="width:10px"></span><span class="legend-dot ly"></span>Last year</div>
+        <div class="ytd-quarterly-row">
+          ${ytdQuarterly.map(item => `
+            <div class="ytd-quarterly-pill">
+              <div class="yq-label">${item.label}</div>
+              ${dollarChangeBadge(item.dollar_change)}
+            </div>
+          `).join('')}
+        </div>
       </div>
       <div class="detail-section">
         <h2>Category breakdown</h2>
@@ -1044,6 +1196,13 @@
         <div id="categoryResults">${categoryResultsHtml()}</div>
       </div>
       <div class="detail-section">
+        <div style="display:flex; justify-content:center; margin-bottom:14px;">
+          <div class="sort-mode-toggle">
+            <button class="sort-mode-btn ${gainsDeclinesSortMode === 'value' ? 'active' : ''}" data-mode="value">Value</button>
+            <button class="sort-mode-btn ${gainsDeclinesSortMode === 'units' ? 'active' : ''}" data-mode="units">Units</button>
+            <button class="sort-mode-btn ${gainsDeclinesSortMode === 'percent' ? 'active' : ''}" data-mode="percent">Percentage</button>
+          </div>
+        </div>
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
           <div>
             <h2>Top 20 — biggest gains</h2>
@@ -1076,7 +1235,15 @@
         if (btn.dataset.more === 'gains') visibleGains += 10
         if (btn.dataset.more === 'declines') visibleDeclines += 10
         if (btn.dataset.more === 'specials') visibleSpecials += 5
-        renderAccountDetail(dealer, accno, monthly, variance, discounts, specials)
+        renderAccountDetail(dealer, accno, monthly, variance, discounts, specials, ytdQuarterly)
+      })
+    })
+    content.querySelectorAll('.sort-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        gainsDeclinesSortMode = btn.dataset.mode
+        visibleGains = 10
+        visibleDeclines = 10
+        renderAccountDetail(dealer, accno, monthly, variance, discounts, specials, ytdQuarterly)
       })
     })
 
@@ -1122,7 +1289,7 @@
     content.querySelectorAll('.order-btn[data-ordersku]').forEach(btn => {
       btn.addEventListener('click', () => {
         currentOrderList.push({ sku: btn.dataset.ordersku, description: btn.dataset.orderdesc, qty: 1 })
-        renderAccountDetail(dealer, accno, monthly, variance, discounts, specials)
+        renderAccountDetail(dealer, accno, monthly, variance, discounts, specials, ytdQuarterly)
       })
     })
   }
@@ -1259,7 +1426,10 @@
       e.total += Number(r.total)
     })
     const sortedYears = [...years].sort((a, b) => a - b)
-    const historyItems = [...byStock.values()].sort((a, b) => b.total - a.total)
+    const historyItems = [...byStock.values()].sort((a, b) => {
+      if (a.in_range !== b.in_range) return a.in_range ? 1 : -1
+      return b.total - a.total
+    })
     const gapCount = historyItems.filter(i => !i.in_range).length
 
     function historyRow(item) {
@@ -1290,8 +1460,8 @@
           : entries.map(checklistLineHtml).join('')}
         ${addLineFormOpen ? `
           <div class="add-line-form">
-            <input id="newBrand" placeholder="Brand">
             <input id="newSku" placeholder="SKU / model">
+            <input id="newBrand" placeholder="Brand">
             <input id="newDesc" placeholder="Description">
             <input id="newQty" type="number" min="0" placeholder="Qty" value="1">
             <button class="confirm-btn" id="confirmAddLine">Add</button>
@@ -1463,7 +1633,7 @@
       <div class="followup-banner">
         <div>
           <div class="fu-text">${f.note}</div>
-          <div class="fu-meta">${f.created_by || 'Office'} · ${new Date(f.created_at).toLocaleDateString()}</div>
+          <div class="fu-meta">${f.created_by || 'Office'} · ${formatNZDate(f.created_at)}</div>
         </div>
         <button class="followup-resolve-btn" data-id="${f.id}">Mark done</button>
       </div>
@@ -1473,7 +1643,7 @@
       ? `<div class="placeholder-note">No previous call notes recorded for this dealer.</div>`
       : cachedRecentCalls.map(c => `
           <div class="recent-call-card">
-            <div class="recent-call-meta">${c.visit_date || ''} · ${c.rep_name || 'Unknown rep'}</div>
+            <div class="recent-call-meta">${formatNZDate(c.visit_date)} · ${c.rep_name || 'Unknown rep'}</div>
             <div class="recent-call-notes">${c.call_notes || '(no notes written)'}</div>
           </div>
         `).join('')
