@@ -202,10 +202,15 @@
     border-top: 1px solid var(--border); flex-wrap: wrap;
   }
   .ytd-quarterly-pill {
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
     background: var(--surface); border-radius: 8px; padding: 8px 14px;
   }
+  .ytd-quarterly-pill.wide { flex: 0 0 auto; }
   .yq-label { font-size: 11px; color: var(--slate-dim); font-weight: 600; }
+  .yq-triple { display: flex; gap: 18px; margin-top: 4px; }
+  .yq-mini { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .yq-mini-label { font-size: 10px; color: var(--slate-dim); font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; }
+  .yq-mini-value { font-size: 15px; font-weight: 700; color: var(--ink); }
   .sort-mode-toggle { display: flex; gap: 4px; background: var(--surface); border-radius: 8px; padding: 3px; }
   .sort-mode-btn {
     border: none; background: none; padding: 6px 12px; font-size: 12px; font-weight: 600;
@@ -585,6 +590,10 @@
     const n = Number(v)
     if (n >= 1000) return '$' + (n / 1000).toFixed(1) + 'k'
     return '$' + Math.round(n)
+  }
+
+  function fullDollar(v) {
+    return '$' + Math.round(Number(v)).toLocaleString()
   }
 
   // NZ date style (DD/MM/YYYY) - never rely on the browser's own
@@ -1179,12 +1188,33 @@
         <div class="chart"><div class="chart-bars-row">${bars}</div></div>
         <div class="chart-legend"><span class="legend-dot ty"></span>This year<span style="width:10px"></span><span class="legend-dot ly"></span>Last year</div>
         <div class="ytd-quarterly-row">
-          ${ytdQuarterly.map(item => `
-            <div class="ytd-quarterly-pill">
-              <div class="yq-label">${item.label}</div>
-              ${dollarChangeBadge(item.dollar_change)}
-            </div>
-          `).join('')}
+          ${ytdQuarterly.map(item => {
+            if (item.metric === 'rolling12') {
+              return `
+                <div class="ytd-quarterly-pill wide">
+                  <div class="yq-label">${item.label}</div>
+                  <div class="yq-triple">
+                    <div class="yq-mini">
+                      <div class="yq-mini-label">This year</div>
+                      <div class="yq-mini-value">${fullDollar(item.this_total)}</div>
+                    </div>
+                    <div class="yq-mini">
+                      <div class="yq-mini-label">Last year</div>
+                      <div class="yq-mini-value">${fullDollar(item.last_total)}</div>
+                    </div>
+                    <div class="yq-mini">
+                      <div class="yq-mini-label">Change</div>
+                      ${dollarChangeBadge(item.dollar_change)}
+                    </div>
+                  </div>
+                </div>`
+            }
+            return `
+              <div class="ytd-quarterly-pill">
+                <div class="yq-label">${item.label}</div>
+                ${dollarChangeBadge(item.dollar_change)}
+              </div>`
+          }).join('')}
         </div>
       </div>
       <div class="detail-section">
