@@ -239,6 +239,9 @@
   .add-range-btn:hover { background: var(--navy); color: #fff; }
   .add-range-btn.gap-style { border-color: #C1501F; color: #C1501F; margin-left: 0; }
   .add-range-btn.gap-style:hover { background: #C1501F; color: #fff; }
+  .add-range-btn.quick-add-btn { border-color: var(--lime-dark); color: var(--lime-dark); margin-left: 0; margin-top: 10px; }
+  .add-range-btn.quick-add-btn:hover { background: var(--lime-dark); color: #fff; }
+  .quick-add-form { margin-top: 10px; border-color: var(--lime-dark); }
   .wholegoods-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .wholegoods-table th {
     text-align: right; color: var(--slate-dim); font-weight: 700; padding: 0 10px 8px;
@@ -1328,6 +1331,7 @@
   let checklistState = {}
   let newLineSeq = 0
   let addLineFormOpen = false
+  let quickAddFormOpen = false
   let cachedHistoryRows = []
   let wholegoodsInitialized = false
 
@@ -1497,6 +1501,16 @@
             <button class="confirm-btn" id="confirmAddLine">Add</button>
           </div>
         ` : `<button class="add-range-btn" id="openAddLine">+ Add new line</button>`}
+        ${currentIsManager ? (quickAddFormOpen ? `
+          <div class="add-line-form quick-add-form">
+            <input id="quickSku" placeholder="SKU / model">
+            <input id="quickBrand" placeholder="Brand">
+            <input id="quickDesc" placeholder="Description">
+            <input id="quickQty" type="number" min="0" placeholder="Qty" value="1">
+            <button class="confirm-btn" id="confirmQuickAdd">Save now</button>
+          </div>
+          <div class="acc-sub" style="margin-top:6px;">Saves straight to the checklist — doesn't touch call notes or create a visit record.</div>
+        ` : `<button class="add-range-btn quick-add-btn" id="openQuickAdd">+ Quick add (saves immediately, no report needed)</button>`) : ''}
         <div class="send-report-bar">
           <div class="report-summary">
             ${hasChanges ? `${confirmedCount} confirmed · ${updatedCount} updated · ${newCount} new` : 'No changes yet'}
@@ -1580,6 +1594,39 @@
         confirmed: false, isNew: true, note: '',
       }
       addLineFormOpen = false
+      renderWholegoodsPage(accno, dealerName)
+    }
+
+    const openQuickAddBtn = document.getElementById('openQuickAdd')
+    if (openQuickAddBtn) openQuickAddBtn.onclick = () => { quickAddFormOpen = true; renderWholegoodsPage(accno, dealerName) }
+    const confirmQuickAddBtn = document.getElementById('confirmQuickAdd')
+    if (confirmQuickAddBtn) confirmQuickAddBtn.onclick = async () => {
+      const sku = document.getElementById('quickSku').value
+      const brand = document.getElementById('quickBrand').value
+      const description = document.getElementById('quickDesc').value
+      const qty = document.getElementById('quickQty').value || 0
+      confirmQuickAddBtn.disabled = true
+      confirmQuickAddBtn.textContent = 'Saving…'
+      const today = new Date().toISOString().slice(0, 10)
+      const { data, error } = await supabase.from('dealer_floor_stock').insert({
+        accno, brand, sku, description,
+        last_recorded_qty: qty, last_recorded_date: today,
+      }).select().single()
+      if (error) {
+        alert('Could not save: ' + error.message)
+        confirmQuickAddBtn.disabled = false
+        confirmQuickAddBtn.textContent = 'Save now'
+        return
+      }
+      // Reflect it immediately as a normal existing line - not tied to
+      // this visit's checklist changes, since nothing here goes near
+      // Send Report.
+      checklistState[data.id] = {
+        id: data.id, brand: data.brand, sku: data.sku, description: data.description,
+        last_recorded_qty: data.last_recorded_qty, qty: data.last_recorded_qty,
+        confirmed: false, isNew: false, note: '',
+      }
+      quickAddFormOpen = false
       renderWholegoodsPage(accno, dealerName)
     }
 
