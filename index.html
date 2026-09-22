@@ -572,6 +572,13 @@
     return `${days} days ago`
   }
 
+  function fmtEtaDate(dateStr) {
+    if (!dateStr) return null
+    // Same local-calendar-date parsing as daysAgoLabel, for the same reason.
+    const [y, m, d] = dateStr.split('-').map(Number)
+    return new Date(y, m - 1, d).toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
   function varianceBadge(pct) {
     if (pct === null || pct === undefined) return `<span class="variance-badge variance-steady">New</span>`
     const rounded = Math.round(pct)
@@ -1006,16 +1013,33 @@
           .limit(30)
         if (error) { resultsEl.innerHTML = `<div class="empty-state">Search failed: ${error.message}</div>`; return }
         if (!data || data.length === 0) { resultsEl.innerHTML = `<div class="placeholder-note">No wholegoods match "${q}".</div>`; return }
+
+        // Zero-stock items get an ETA from the nearest outstanding
+        // purchase order, if there is one - one batched lookup for
+        // however many zero-stock rows are in this result set, not one
+        // query per row.
+        const zeroStockCodes = data.filter(item => !(Number(item.soh) > 0)).map(item => item.stockcode)
+        let etaByStockcode = {}
+        if (zeroStockCodes.length > 0) {
+          const { data: etaRows } = await supabase
+            .from('stock_po_eta')
+            .select('stockcode, eta_date')
+            .in('stockcode', zeroStockCodes)
+          etaByStockcode = Object.fromEntries((etaRows || []).map(r => [r.stockcode, r.eta_date]))
+        }
+
         resultsEl.innerHTML = `
           <table class="detail-table">
-            <thead><tr><th>Part number</th><th>Description</th><th>Stock on hand</th></tr></thead>
+            <thead><tr><th>Part number</th><th>Description</th><th>Stock on hand</th><th>ETA</th></tr></thead>
             <tbody>${data.map(item => {
               const inStock = Number(item.soh) > 0
+              const eta = inStock ? null : fmtEtaDate(etaByStockcode[item.stockcode])
               return `
               <tr style="background:${inStock ? 'var(--ok-tint)' : 'var(--err-tint)'};">
                 <td>${item.stockcode}</td>
                 <td>${item.description || '—'}</td>
                 <td style="font-weight:700; color:${inStock ? 'var(--ok)' : 'var(--err)'};">${item.soh != null ? Number(item.soh) : '—'}</td>
+                <td>${eta || (inStock ? '' : '—')}</td>
               </tr>`}).join('')}
             </tbody>
           </table>
@@ -1493,6 +1517,14 @@
           ? `<div class="placeholder-note">No floor stock recorded for this dealer yet. Use "Add new line" below to start one.</div>`
           : entries.map(checklistLineHtml).join('')}
         ${addLineFormOpen ? `
+          <div class="search-wrap" style="display:block; margin-bottom:10px; max-width:480px;">
+            <input class="search-input" id="newLineStockSearch" type="text" placeholder="Search by SKU or model to fill in the fields below" style="width:100%;">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <div class="stock-search-results" id="newLineStockResults" style="display:none;"></div>
+          </div>
           <div class="add-line-form">
             <input id="newSku" placeholder="SKU / model">
             <input id="newBrand" placeholder="Brand">
@@ -1502,6 +1534,14 @@
           </div>
         ` : `<button class="add-range-btn" id="openAddLine">+ Add new line</button>`}
         ${currentIsManager ? (quickAddFormOpen ? `
+          <div class="search-wrap" style="display:block; margin-bottom:10px; max-width:480px;">
+            <input class="search-input" id="quickAddStockSearch" type="text" placeholder="Search by SKU or model to fill in the fields below" style="width:100%;">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <div class="stock-search-results" id="quickAddStockResults" style="display:none;"></div>
+          </div>
           <div class="add-line-form quick-add-form">
             <input id="quickSku" placeholder="SKU / model">
             <input id="quickBrand" placeholder="Brand">
@@ -1580,6 +1620,84 @@
         checklistState[e.target.dataset.id].note = e.target.value
       })
     })
+    // Known brands where the description's first word IS the brand and can
+    // be split out cleanly - a whitelist rather than a list of exceptions,
+    // so anything NOT on this list just leaves Brand blank (same as manual
+    // entry today) instead of risking a confidently wrong split on a brand
+    // we don't know about yet. Values are the canonical casing to save,
+    // regardless of how EXO happens to capitalise it in any given
+    // description. Add to this list as new brands come up.
+    const KNOWN_BRANDS = {
+      echo: 'Echo', shindaiwa: 'Shindaiwa', greenworks: 'Greenworks', atom: 'Atom',
+      stiga: 'Stiga', mountfield: 'Mountfield', mojack: 'MoJack', archer: 'Archer',
+      atex: 'Atex', sina: 'Sina', cox: 'Cox', meiwa: 'Meiwa',
+    }
+    function splitBrandFromDescription(description) {
+      const desc = (description || '').trim()
+      const firstSpace = desc.indexOf(' ')
+      const firstWord = (firstSpace === -1 ? desc : desc.slice(0, firstSpace)).toLowerCase()
+      const known = KNOWN_BRANDS[firstWord]
+      if (!known) return { brand: '', description: desc }
+      return { brand: known, description: (firstSpace === -1 ? '' : desc.slice(firstSpace + 1).trim()) }
+    }
+
+    // Shared SKU/model lookup for the two floor-stock add forms below - same
+    // wholegoods-only search as the Stock Lookup screen, so typing either a
+    // real SKU or a model number found in the description both work. Tapping
+    // a result fills in the SKU, Brand (if recognised - see KNOWN_BRANDS
+    // above) and Description fields; Qty is left for manual entry. Manual
+    // typing into the fields directly still works as a fallback for
+    // anything not in the catalogue, or a brand not yet on the list.
+    function wireStockSearchInput(searchInputId, resultsId, skuInputId, brandInputId, descInputId) {
+      const searchInput = document.getElementById(searchInputId)
+      const resultsEl = document.getElementById(resultsId)
+      if (!searchInput || !resultsEl) return
+      let searchTimeout = null
+      searchInput.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout)
+        const q = e.target.value.trim()
+        if (q.length < 2) { resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return }
+        searchTimeout = setTimeout(async () => {
+          resultsEl.style.display = 'block'
+          resultsEl.innerHTML = `<div class="stock-search-result">Searching…</div>`
+          const { data, error } = await supabase
+            .from('stock_items')
+            .select('stockcode, description')
+            .eq('stockgroup2', 2)
+            .eq('is_active', true)
+            .or(`stockcode.ilike.%${q}%,description.ilike.%${q}%`)
+            .order('description')
+            .limit(20)
+          if (error) { resultsEl.innerHTML = `<div class="stock-search-result">Search failed: ${error.message}</div>`; return }
+          if (!data || data.length === 0) { resultsEl.innerHTML = `<div class="stock-search-result">No match for "${q}".</div>`; return }
+          resultsEl.innerHTML = data.map(item => `
+            <div class="stock-search-result" data-stockcode="${item.stockcode}" data-description="${(item.description || '').replace(/"/g, '&quot;')}">
+              <strong>${item.stockcode}</strong> — ${item.description || ''}
+            </div>
+          `).join('')
+          resultsEl.querySelectorAll('.stock-search-result[data-stockcode]').forEach(row => {
+            // mousedown, not click - fires before the search input's blur
+            // event would otherwise hide the dropdown first
+            row.addEventListener('mousedown', (ev) => {
+              ev.preventDefault()
+              const { brand, description } = splitBrandFromDescription(row.dataset.description)
+              document.getElementById(skuInputId).value = row.dataset.stockcode
+              document.getElementById(brandInputId).value = brand
+              document.getElementById(descInputId).value = description
+              searchInput.value = ''
+              resultsEl.style.display = 'none'
+              resultsEl.innerHTML = ''
+            })
+          })
+        }, 250)
+      })
+      searchInput.addEventListener('blur', () => {
+        setTimeout(() => { resultsEl.style.display = 'none' }, 150)
+      })
+    }
+    wireStockSearchInput('newLineStockSearch', 'newLineStockResults', 'newSku', 'newBrand', 'newDesc')
+    wireStockSearchInput('quickAddStockSearch', 'quickAddStockResults', 'quickSku', 'quickBrand', 'quickDesc')
+
     const openBtn = document.getElementById('openAddLine')
     if (openBtn) openBtn.onclick = () => { addLineFormOpen = true; renderWholegoodsPage(accno, dealerName) }
     const confirmAddBtn = document.getElementById('confirmAddLine')
