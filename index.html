@@ -299,6 +299,12 @@
   .add-line-form input {
     padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; width: 100%;
   }
+  .add-line-form .search-input {
+    /* The base .search-input border/background is too close to this
+       form's own background/dashed border to read as a distinct field -
+       give it a stronger, higher-contrast border here specifically. */
+    border: 2px solid var(--navy); background: var(--paper);
+  }
   .stock-search-results {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
     background: var(--paper); border: 1px solid var(--border); border-radius: 8px;
@@ -1517,15 +1523,15 @@
           ? `<div class="placeholder-note">No floor stock recorded for this dealer yet. Use "Add new line" below to start one.</div>`
           : entries.map(checklistLineHtml).join('')}
         ${addLineFormOpen ? `
-          <div class="search-wrap" style="display:block; margin-bottom:10px; max-width:480px;">
-            <input class="search-input" id="newLineStockSearch" type="text" placeholder="Search by SKU or model to fill in the fields below" style="width:100%;">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="7"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <div class="stock-search-results" id="newLineStockResults" style="display:none;"></div>
-          </div>
           <div class="add-line-form">
+            <div class="search-wrap" style="grid-column: 1 / -1; display: block;">
+              <input class="search-input" id="newLineStockSearch" type="text" placeholder="Search by SKU or model to fill in the fields below" style="width:100%;">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <div class="stock-search-results" id="newLineStockResults" style="display:none;"></div>
+            </div>
             <input id="newSku" placeholder="SKU / model">
             <input id="newBrand" placeholder="Brand">
             <input id="newDesc" placeholder="Description">
@@ -1534,15 +1540,15 @@
           </div>
         ` : `<button class="add-range-btn" id="openAddLine">+ Add new line</button>`}
         ${currentIsManager ? (quickAddFormOpen ? `
-          <div class="search-wrap" style="display:block; margin-bottom:10px; max-width:480px;">
-            <input class="search-input" id="quickAddStockSearch" type="text" placeholder="Search by SKU or model to fill in the fields below" style="width:100%;">
-            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="11" cy="11" r="7"></circle>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-            </svg>
-            <div class="stock-search-results" id="quickAddStockResults" style="display:none;"></div>
-          </div>
           <div class="add-line-form quick-add-form">
+            <div class="search-wrap" style="grid-column: 1 / -1; display: block;">
+              <input class="search-input" id="quickAddStockSearch" type="text" placeholder="Search by SKU or model to fill in the fields below" style="width:100%;">
+              <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <div class="stock-search-results" id="quickAddStockResults" style="display:none;"></div>
+            </div>
             <input id="quickSku" placeholder="SKU / model">
             <input id="quickBrand" placeholder="Brand">
             <input id="quickDesc" placeholder="Description">
