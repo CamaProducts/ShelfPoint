@@ -822,6 +822,25 @@
     })
   }
 
+  async function fetchAllRows(tableOrView) {
+    // Supabase's API caps any single request at 1000 rows regardless of
+    // how many actually exist (a PostgREST default, not a real data
+    // limit) - page through in batches of 1000 until a page comes back
+    // with fewer than that, so this keeps working no matter how large
+    // the dealer list grows in future rather than silently truncating.
+    const pageSize = 1000
+    let from = 0
+    let allRows = []
+    while (true) {
+      const { data, error } = await supabase.from(tableOrView).select('*').range(from, from + pageSize - 1)
+      if (error) return { data: null, error }
+      allRows = allRows.concat(data || [])
+      if (!data || data.length < pageSize) break
+      from += pageSize
+    }
+    return { data: allRows, error: null }
+  }
+
   async function showLoggedIn(user) {
     content.innerHTML = `<div class="empty-state">Loading accounts…</div>`
 
@@ -836,7 +855,7 @@
     currentUserArea = staffRow?.area || null
     currentStaffno = staffRow?.staffno ?? parseInt(staffno, 10)
 
-    const { data: dealers, error } = await supabase.from('v_dealer_summary').select('*')
+    const { data: dealers, error } = await fetchAllRows('v_dealer_summary')
 
     if (error) {
       content.innerHTML = `<div class="empty-state">Couldn't load accounts: ${error.message}</div>`
