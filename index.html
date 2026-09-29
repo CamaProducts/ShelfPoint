@@ -764,6 +764,7 @@
       <div class="nav-item ${repFilter !== 'all' ? 'active' : ''}" id="navMyDealers">My Dealers</div>
       <div class="nav-item ${repFilter === 'all' ? 'active' : ''}" id="navAllDealers">All Dealers</div>
       <div class="nav-item" id="navStockLookup">Stock Lookup</div>
+      ${currentIsManager ? `<div class="nav-item" id="navSpecials">Specials</div>` : ''}
     `)
     wireLogout()
     document.getElementById('navMyDealers').onclick = () => {
@@ -773,6 +774,7 @@
       repFilter = 'all'; renderAccountsList()
     }
     document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+    if (currentIsManager) document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
 
     topbarTitle.textContent = 'Accounts'
     topbarSubtitle.textContent = `${sorted.length} account${sorted.length === 1 ? '' : 's'}`
@@ -975,11 +977,13 @@
         <div class="nav-item" id="navMyDealers">My Dealers</div>
         <div class="nav-item" id="navAllDealers">All Dealers</div>
         <div class="nav-item active" id="navStockLookup">Stock Lookup</div>
+        ${currentIsManager ? `<div class="nav-item" id="navSpecials">Specials</div>` : ''}
       `)
       wireLogout()
       document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
       document.getElementById('navAllDealers').onclick = () => { repFilter = 'all'; renderAccountsList() }
       document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+      if (currentIsManager) document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
     }
 
     topbarTitle.textContent = 'Stock Lookup'
@@ -1052,6 +1056,99 @@
         `
       }, 300)
     })
+  }
+
+  async function renderSpecialsAdmin() {
+    document.getElementById('listHeaderRow').style.display = 'none'
+    if (!currentIsManager) { renderAccountsList(); return }
+
+    sidebar.innerHTML = sidebarChrome(`
+      <div class="nav-item" id="navMyDealers">My Dealers</div>
+      <div class="nav-item" id="navAllDealers">All Dealers</div>
+      <div class="nav-item" id="navStockLookup">Stock Lookup</div>
+      <div class="nav-item active" id="navSpecials">Specials</div>
+    `)
+    wireLogout()
+    document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
+    document.getElementById('navAllDealers').onclick = () => { repFilter = 'all'; renderAccountsList() }
+    document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+    document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
+
+    topbarTitle.textContent = 'Monthly Specials'
+    topbarSubtitle.textContent = 'Standard and hire lists'
+    topbarRight.innerHTML = ''
+
+    content.innerHTML = `<div class="empty-state">Loading current specials…</div>`
+
+    const { data: rows, error } = await supabase
+      .from('monthly_specials')
+      .select('stockcode, added_date, accgroup')
+      .order('accgroup')
+      .order('stockcode')
+
+    if (error) {
+      content.innerHTML = `<div class="empty-state">Couldn't load specials: ${error.message}</div>`
+      return
+    }
+
+    const codes = (rows || []).map(r => r.stockcode)
+    let descByCode = {}
+    if (codes.length > 0) {
+      const { data: items } = await supabase.from('stock_items').select('stockcode, description').in('stockcode', codes)
+      descByCode = Object.fromEntries((items || []).map(i => [i.stockcode, i.description]))
+    }
+
+    function groupPanel(accgroup, label, formIdPrefix) {
+      const groupRows = (rows || []).filter(r => r.accgroup === accgroup)
+      const lastUpdated = groupRows.length > 0 ? groupRows[0].added_date : null
+      const listHtml = groupRows.length === 0
+        ? `<div class="placeholder-note">No specials currently loaded for this group.</div>`
+        : `<table class="detail-table">
+            <thead><tr><th>Part number</th><th>Description</th></tr></thead>
+            <tbody>${groupRows.map(r => `<tr><td>${r.stockcode}</td><td>${descByCode[r.stockcode] || '—'}</td></tr>`).join('')}</tbody>
+          </table>`
+      return `
+        <div class="detail-section">
+          <h2>${label}</h2>
+          <div class="acc-sub" style="margin-bottom:10px;">${groupRows.length} part${groupRows.length === 1 ? '' : 's'} currently loaded${lastUpdated ? ` · last replaced ${fmtEtaDate(lastUpdated)}` : ''}</div>
+          ${listHtml}
+          <div style="margin-top:14px;">
+            <label class="acc-sub" for="${formIdPrefix}Textarea">Paste the new list below (one part number per line). Saving <strong>replaces the entire ${label.toLowerCase()} list</strong> above - it doesn't add to it.</label>
+            <textarea id="${formIdPrefix}Textarea" rows="8" style="width:100%; margin-top:6px; font-family: inherit; font-size:13px; padding:10px; border:1px solid var(--border); border-radius:6px;" placeholder="10-1022&#10;10-1203&#10;15-1405"></textarea>
+            <button class="confirm-btn" id="${formIdPrefix}SaveBtn" style="margin-top:8px;">Replace ${label} List</button>
+            <div id="${formIdPrefix}Status" class="acc-sub" style="margin-top:6px;"></div>
+          </div>
+        </div>
+      `
+    }
+
+    content.innerHTML = groupPanel(1, 'Standard Specials', 'standard') + groupPanel(3, 'Hire Specials', 'hire')
+
+    function wireSaveButton(accgroup, formIdPrefix, label) {
+      document.getElementById(`${formIdPrefix}SaveBtn`).addEventListener('click', async () => {
+        const textarea = document.getElementById(`${formIdPrefix}Textarea`)
+        const statusEl = document.getElementById(`${formIdPrefix}Status`)
+        const codes = textarea.value.split(/[\n,]/).map(s => s.trim()).filter(s => s.length > 0)
+        if (codes.length === 0) {
+          statusEl.textContent = 'Paste at least one part number first.'
+          return
+        }
+        if (!confirm(`Replace the entire ${label} list with these ${codes.length} part number(s)? This can't be undone.`)) return
+
+        statusEl.textContent = 'Saving…'
+        const { error: saveError } = await supabase.rpc('replace_monthly_specials', {
+          p_accgroup: accgroup,
+          p_stockcodes: codes,
+        })
+        if (saveError) {
+          statusEl.textContent = `Failed to save: ${saveError.message}`
+          return
+        }
+        renderSpecialsAdmin()
+      })
+    }
+    wireSaveButton(1, 'standard', 'Standard Specials')
+    wireSaveButton(3, 'hire', 'Hire Specials')
   }
 
   async function showAccountDetail(accno) {
@@ -1152,13 +1249,14 @@
           <td>$${Number(v.recent_total).toFixed(0)}<div class="acc-sub">${Number(v.recent_qty).toFixed(0)} units</div></td>
           <td>$${Number(v.prior_total).toFixed(0)}<div class="acc-sub">${Number(v.prior_qty).toFixed(0)} units</div></td>
           <td>${varianceBadge(v.variance_pct)}</td>
+          <td style="text-align:left; white-space:nowrap;">${orderButtonHtml(v.stockcode, v.description)}</td>
         </tr>`).join('')
       const seeMore = visibleCount < list.length
         ? `<button class="see-more-btn" data-more="${onSeeMore}">See ${Math.min(10, list.length - visibleCount)} more</button>`
         : ''
       return `
         <table class="detail-table">
-          <thead><tr><th>Product</th><th>This yr</th><th>Last yr</th><th>Variance</th></tr></thead>
+          <thead><tr><th>Product</th><th>This yr</th><th>Last yr</th><th>Variance</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         ${seeMore}`
