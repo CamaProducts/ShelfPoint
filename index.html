@@ -1288,7 +1288,7 @@
         <tr>
           <td>${s.stockcode}</td>
           <td>${s.description || '—'}</td>
-          <td>${s.times_bought_12mo} units</td>
+          <td>${Number(s.units_12mo ?? s.times_bought_12mo).toFixed(0)} units</td>
           <td style="text-align:left; white-space:nowrap;">${orderButtonHtml(s.stockcode, s.description)}</td>
         </tr>`).join('')
       const seeMore = visibleCount < list.length
