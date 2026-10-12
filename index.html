@@ -23,6 +23,7 @@
     --err-tint: rgba(179,38,30,0.09);
     --ok: #1F7A45;
     --ok-tint: rgba(31,122,69,0.09);
+    --warn: #B26A00;        /* amber - floor stock lines not yet checked */
     --sidebar-w: 240px;
   }
   * { box-sizing: border-box; }
@@ -168,7 +169,10 @@
   .acc-name { font-weight: 600; }
   .acc-sub { font-size: 12px; color: var(--slate-dim); margin-top: 2px; }
   .stop-credit-tag { color: var(--err); font-weight: 600; }
-  .variance-badge { display: inline-block; font-size: 13px; font-weight: 700; padding: 5px 10px; border-radius: 7px; white-space: nowrap; }
+  .variance-badge {
+    display: inline-block; box-sizing: border-box; min-width: 92px; text-align: center;
+    font-size: 13px; font-weight: 700; padding: 5px 10px; border-radius: 7px; white-space: nowrap;
+  }
   .variance-up { background: var(--ok-tint); color: var(--ok); }
   .variance-down { background: var(--err-tint); color: var(--err); }
   .variance-steady { background: var(--surface); color: var(--slate); }
@@ -254,18 +258,37 @@
 
   /* ---- Floor stock checklist ---- */
   .stock-line {
-    display: flex; align-items: center; gap: 14px; background: var(--paper);
+    display: flex; flex-direction: column; align-items: stretch; gap: 10px; background: var(--paper);
     border: 1px solid var(--border); border-left: 4px solid var(--border);
     border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;
   }
+  .stock-line.status-untouched { border-left-color: var(--warn); }
   .stock-line.status-confirmed { background: rgba(181,211,52,0.16); border-left-color: var(--lime-dark); }
   .stock-line.status-updated { background: rgba(33,64,154,0.08); border-left-color: var(--navy); }
   .stock-line.status-new { background: rgba(181,211,52,0.07); border-left-color: var(--lime); }
-  .stock-line-info { flex: 1; min-width: 0; }
+  /* The description keeps its own two lines (brand · SKU, then description)
+     and never gets squeezed by the controls: if the row is too narrow to
+     fit both side by side, the controls wrap onto a second line beneath it
+     instead of the description wrapping over many lines. */
+  .stock-line-info { flex: 1 1 280px; min-width: 0; }
+  .stock-line-title, .stock-line-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .stock-line-title { font-weight: 600; }
   .stock-line-sub { font-size: 12px; color: var(--slate-dim); }
+  .stock-line-controls {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-left: auto;
+  }
+  /* Reason / remove-from-checklist fields only exist when they're needed,
+     and sit on their own line under the row rather than reserving space
+     on every row. */
+  .stock-line-extra { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .stock-line-extra .remove-item-label {
+    display: flex; align-items: flex-start; gap: 5px; cursor: pointer; line-height: 1.3;
+    font-size: 12px; color: var(--err); flex: 0 1 260px;
+  }
+  .stock-line-extra .remove-item-label input { margin-top: 2px; }
+  .stock-line-extra .stock-line-note { flex: 1 1 260px; width: auto; }
   .stock-line-last {
-    font-size: 12px; color: var(--slate-dim); font-style: italic; min-width: 110px;
+    font-size: 12px; color: var(--slate-dim); font-style: italic; min-width: 100px;
   }
   .qty-stepper { display: flex; align-items: center; gap: 4px; }
   .qty-step-btn {
@@ -280,12 +303,97 @@
   }
   .stock-line-status-tag {
     font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-    min-width: 74px; text-align: center;
+    min-width: 88px; text-align: center;
   }
-  .status-untouched .stock-line-status-tag { color: var(--slate-dim); }
+  .status-untouched .stock-line-status-tag { color: var(--warn); }
   .status-confirmed .stock-line-status-tag { color: var(--lime-dark); }
   .status-updated .stock-line-status-tag { color: var(--navy); }
   .status-new .stock-line-status-tag { color: var(--lime-dark); }
+  /* Stock-outs screen: same header band + tile rows as the accounts list,
+     just with its own column layout. */
+  .list-header-row.stockouts-header { grid-template-columns: 2fr 2fr 1fr 1fr; }
+  .account-row.stockout-row { grid-template-columns: 2fr 2fr 1fr 1fr; }
+  .account-row.no-link { cursor: default; }
+  .account-row.no-link:hover { border-color: var(--border); box-shadow: none; }
+  .date-range {
+    display: flex; align-items: center; gap: 8px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 0 12px;
+    font-size: 13px; color: var(--slate-dim); white-space: nowrap;
+  }
+  .date-range:focus-within { outline: 2px solid var(--navy); outline-offset: -1px; }
+  .date-range input {
+    border: none; background: transparent; font-family: inherit; font-size: 13px;
+    color: var(--ink); padding: 8px 0; width: 118px;
+  }
+  .date-range input:focus { outline: none; }
+  .topbar-clear {
+    background: none; border: none; color: var(--navy); font-size: 13px; font-weight: 600;
+    cursor: pointer; padding: 6px 4px; white-space: nowrap;
+  }
+  .topbar-clear:hover { text-decoration: underline; }
+  /* Cama Stand Stock: deliberately dense - one slim line per product. */
+  .stand-head, .stand-row {
+    display: grid; grid-template-columns: 120px minmax(0, 1fr) 108px 58px 106px 44px;
+    gap: 10px; align-items: center; padding: 5px 14px;
+  }
+  .stand-head {
+    font-size: 11px; font-weight: 700; color: var(--slate-dim);
+    border-bottom: 1px solid var(--border); padding-bottom: 8px; margin: 0 -14px 0;
+  }
+  .stand-row { font-size: 13px; border-bottom: 1px solid var(--border); margin: 0 -14px; }
+  .stand-row.checked { background: rgba(181,211,52,0.16); }
+  .stand-sku { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stand-desc { color: var(--slate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stand-row .qty-stepper { gap: 3px; }
+  .stand-step-btn {
+    width: 26px; height: 28px; border: 1px solid var(--border); background: var(--surface);
+    color: var(--navy); font-size: 16px; font-weight: 700; border-radius: 6px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0; padding: 0;
+  }
+  .stand-step-btn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .stand-qty {
+    width: 40px; padding: 5px 2px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 13px; text-align: center;
+  }
+  .stand-row .toggle-switch { width: 36px; height: 20px; }
+  .stand-row .toggle-slider:before { height: 14px; width: 14px; left: 3px; bottom: 3px; }
+  .stand-row .toggle-switch input:checked + .toggle-slider:before { transform: translateX(16px); }
+  .stand-row .order-btn { padding: 4px 8px; font-size: 11px; }
+  .stand-row.pending-remove { background: var(--err-tint); }
+  .stand-row.pending-remove .stand-sku, .stand-row.pending-remove .stand-desc { text-decoration: line-through; color: var(--err); }
+  .stand-row.pending-remove .qty-stepper, .stand-row.pending-remove .toggle-switch, .stand-row.pending-remove .order-btn {
+    opacity: 0.35; pointer-events: none;
+  }
+  .stand-undo { background: none; border: none; color: var(--navy); font-size: 12px; font-weight: 700; cursor: pointer; padding: 0; text-align: right; }
+  .stand-undo:hover { text-decoration: underline; }
+  .stand-remove { background: none; border: none; color: var(--slate-dim); font-size: 14px; cursor: pointer; padding: 0; }
+  .stand-remove:hover { color: var(--err); }
+  .stand-add { position: relative; padding-top: 12px; max-width: 520px; }
+  .stand-add .stock-search-results { top: auto; bottom: calc(100% + 4px); }
+  .app-modal-overlay {
+    position: fixed; inset: 0; background: rgba(13,27,64,0.55); z-index: 1000;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .app-modal {
+    background: var(--paper); border-radius: 14px; width: 100%; max-width: 440px; max-height: 85vh;
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(13,27,64,0.35);
+  }
+  .app-modal-head { padding: 20px 22px 0; font-size: 17px; font-weight: 700; color: var(--ink); }
+  .app-modal-body { padding: 10px 22px 4px; font-size: 14px; color: var(--slate); line-height: 1.5; overflow-y: auto; }
+  .app-modal-list {
+    margin: 12px 0 6px; padding: 10px 14px; background: var(--surface); border: 1px solid var(--border);
+    border-left: 4px solid var(--warn); border-radius: 8px; font-size: 13px; color: var(--ink);
+    max-height: 220px; overflow-y: auto;
+  }
+  .app-modal-list div + div { margin-top: 5px; }
+  .app-modal-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; padding: 14px 22px 20px; }
+  .app-modal-btn {
+    padding: 10px 16px; font-size: 14px; font-weight: 600; border-radius: 8px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--paper); color: var(--ink);
+  }
+  .app-modal-btn:hover { border-color: var(--navy); color: var(--navy); }
+  .app-modal-btn.primary { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .app-modal-btn.primary:hover { background: var(--navy-dark); border-color: var(--navy-dark); color: #fff; }
   .confirm-btn {
     padding: 7px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer;
     border: 1px solid var(--border); background: var(--paper); color: var(--slate);
@@ -371,16 +479,12 @@
   }
   .toggle-switch input:checked + .toggle-slider { background: var(--lime-dark); }
   .toggle-switch input:checked + .toggle-slider:before { transform: translateX(19px); }
-  .stock-line-note-slot { width: 340px; flex-shrink: 0; }
-  .remove-item-slot { width: 210px; flex-shrink: 0; font-size: 11px; color: var(--err); }
-  .remove-item-slot label { display: flex; align-items: flex-start; gap: 5px; cursor: pointer; line-height: 1.3; }
-  .remove-item-slot input { margin-top: 2px; }
   .stock-line-note {
     width: 100%; padding: 8px 10px; border: 1px solid var(--border);
     border-radius: 6px; font-size: 13px;
   }
   .stock-line-wrap { display: flex; flex-direction: column; width: 100%; }
-  .stock-line-row { display: flex; align-items: center; gap: 14px; width: 100%; }
+  .stock-line-row { display: flex; align-items: center; gap: 14px; width: 100%; flex-wrap: wrap; }
   .order-btn {
     padding: 7px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; cursor: pointer;
     border: 1px solid var(--lime-dark); background: var(--paper); color: var(--lime-dark); white-space: nowrap;
@@ -578,6 +682,45 @@
     return `${days} days ago`
   }
 
+  // In-app replacement for the browser's plain alert()/confirm() boxes.
+  // appConfirm resolves true if the confirm button is pressed, false for the
+  // cancel button, Escape, or tapping outside the box (so the safe choice is
+  // always what happens if someone dismisses it). `primary` says which button
+  // gets the strong colour - 'cancel' when "go back" is the preferred action.
+  function appDialog({ title, message, items, confirmLabel, cancelLabel, primary }) {
+    return new Promise(resolve => {
+      const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      const overlay = document.createElement('div')
+      overlay.className = 'app-modal-overlay'
+      overlay.innerHTML = `
+        <div class="app-modal" role="dialog" aria-modal="true">
+          <div class="app-modal-head">${esc(title)}</div>
+          <div class="app-modal-body">
+            <div>${esc(message).replace(/\n/g, '<br>')}</div>
+            ${items && items.length ? `<div class="app-modal-list">${items.map(i => `<div>${esc(i)}</div>`).join('')}</div>` : ''}
+          </div>
+          <div class="app-modal-actions">
+            ${cancelLabel ? `<button class="app-modal-btn ${primary === 'cancel' ? 'primary' : ''}" data-act="cancel">${esc(cancelLabel)}</button>` : ''}
+            <button class="app-modal-btn ${primary === 'cancel' ? '' : 'primary'}" data-act="confirm">${esc(confirmLabel || 'OK')}</button>
+          </div>
+        </div>`
+      const onKey = (e) => { if (e.key === 'Escape') close(false) }
+      function close(result) {
+        document.removeEventListener('keydown', onKey)
+        overlay.remove()
+        resolve(result)
+      }
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false) })
+      overlay.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => close(b.dataset.act === 'confirm')))
+      document.addEventListener('keydown', onKey)
+      document.body.appendChild(overlay)
+      const focusBtn = overlay.querySelector('.app-modal-btn.primary')
+      if (focusBtn) focusBtn.focus()
+    })
+  }
+  function appConfirm(opts) { return appDialog(opts) }
+  function appAlert(message, title = 'Heads up') { return appDialog({ title, message, confirmLabel: 'OK' }) }
+
   function fmtEtaDate(dateStr) {
     if (!dateStr) return null
     // Same local-calendar-date parsing as daysAgoLabel, for the same reason.
@@ -764,6 +907,7 @@
       <div class="nav-item ${repFilter !== 'all' ? 'active' : ''}" id="navMyDealers">My Dealers</div>
       <div class="nav-item ${repFilter === 'all' ? 'active' : ''}" id="navAllDealers">All Dealers</div>
       <div class="nav-item" id="navStockLookup">Stock Lookup</div>
+      ${currentIsManager ? `<div class="nav-item" id="navStockOuts">Stock-outs</div>` : ''}
       ${currentIsManager ? `<div class="nav-item" id="navSpecials">Specials</div>` : ''}
     `)
     wireLogout()
@@ -774,6 +918,7 @@
       repFilter = 'all'; renderAccountsList()
     }
     document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+    if (currentIsManager) document.getElementById('navStockOuts').onclick = () => renderStockOuts()
     if (currentIsManager) document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
 
     topbarTitle.textContent = 'Accounts'
@@ -790,6 +935,7 @@
 
     const listHeaderRow = document.getElementById('listHeaderRow')
     listHeaderRow.style.display = 'grid'
+    listHeaderRow.classList.remove('stockouts-header')
     listHeaderRow.innerHTML = `
       <div class="col ${currentSort === 'name' ? 'sorted' : ''}" data-sort="name">Dealer${sortArrow('name')}</div>
       <div class="col ${currentSort === 'rep' ? 'sorted' : ''}" data-sort="rep">Rep${sortArrow('rep')}</div>
@@ -820,6 +966,22 @@
     content.querySelectorAll('.account-row').forEach(row => {
       row.addEventListener('click', () => showAccountDetail(Number(row.dataset.accno)))
     })
+  }
+
+  // Same idea as fetchAllRows, but for a filtered query: pass a function that
+  // builds a fresh query each time (it must include a stable .order()).
+  async function fetchAllPages(buildQuery) {
+    const pageSize = 1000
+    let from = 0
+    let allRows = []
+    while (true) {
+      const { data, error } = await buildQuery().range(from, from + pageSize - 1)
+      if (error) return { data: null, error }
+      allRows = allRows.concat(data || [])
+      if (!data || data.length < pageSize) break
+      from += pageSize
+    }
+    return { data: allRows, error: null }
   }
 
   async function fetchAllRows(tableOrView) {
@@ -900,6 +1062,10 @@
       currentVisitAccno = accno
       currentOrderList = []
       checklistState = {}
+      standChecked = {}
+      standVisited = false
+      standAddedSkus = []
+      standPendingRemoval = {}
       wholegoodsInitialized = false
       currentCallNotes = ''
       callNotesInitialized = false
@@ -969,7 +1135,7 @@
 
     document.getElementById('addContactBtn').onclick = async () => {
       const name = document.getElementById('contactName').value.trim()
-      if (!name) { alert('Enter at least a name before adding a contact.'); return }
+      if (!name) { appAlert('Enter at least a name before adding a contact.'); return }
       const btn = document.getElementById('addContactBtn')
       btn.disabled = true
       const { error } = await supabase.from('dealer_contacts').insert({
@@ -981,7 +1147,7 @@
         notes: document.getElementById('contactNotes').value,
         added_by: currentUserLabel,
       })
-      if (error) { alert('Could not save contact: ' + error.message); btn.disabled = false; return }
+      if (error) { appAlert('Could not save contact: ' + error.message, "Couldn't save"); btn.disabled = false; return }
       showContactsTab(accno)
     }
   }
@@ -996,12 +1162,14 @@
         <div class="nav-item" id="navMyDealers">My Dealers</div>
         <div class="nav-item" id="navAllDealers">All Dealers</div>
         <div class="nav-item active" id="navStockLookup">Stock Lookup</div>
+        ${currentIsManager ? `<div class="nav-item" id="navStockOuts">Stock-outs</div>` : ''}
         ${currentIsManager ? `<div class="nav-item" id="navSpecials">Specials</div>` : ''}
       `)
       wireLogout()
       document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
       document.getElementById('navAllDealers').onclick = () => { repFilter = 'all'; renderAccountsList() }
       document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+      if (currentIsManager) document.getElementById('navStockOuts').onclick = () => renderStockOuts()
       if (currentIsManager) document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
     }
 
@@ -1077,6 +1245,178 @@
     })
   }
 
+  // ---------- STOCK-OUTS (managers): checklist lines the reps have recorded at zero ----------
+  // Laid out like the accounts list: search + date range in the top bar,
+  // sortable column headings in the header band, one tile per line.
+  let stockOutRows = []
+  let stockOutFilters = { q: '', from: '', to: '' }
+  let stockOutSort = { key: 'date', dir: 'desc' }
+
+  async function renderStockOuts() {
+    if (!currentIsManager) { renderAccountsList(); return }
+
+    sidebar.innerHTML = sidebarChrome(`
+      <div class="nav-item" id="navMyDealers">My Dealers</div>
+      <div class="nav-item" id="navAllDealers">All Dealers</div>
+      <div class="nav-item" id="navStockLookup">Stock Lookup</div>
+      <div class="nav-item active" id="navStockOuts">Stock-outs</div>
+      <div class="nav-item" id="navSpecials">Specials</div>
+    `)
+    wireLogout()
+    document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
+    document.getElementById('navAllDealers').onclick = () => { repFilter = 'all'; renderAccountsList() }
+    document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+    document.getElementById('navStockOuts').onclick = () => renderStockOuts()
+    document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
+
+    const listHeaderRow = document.getElementById('listHeaderRow')
+    listHeaderRow.style.display = 'none'
+    topbarTitle.textContent = 'Stock-outs'
+    topbarSubtitle.textContent = 'Loading…'
+    topbarRight.innerHTML = ''
+    content.innerHTML = `<div class="empty-state">Loading stock-outs…</div>`
+
+    // Every active checklist line whose last recorded quantity is zero.
+    const { data, error } = await fetchAllPages(() => supabase
+      .from('dealer_floor_stock')
+      .select('id, accno, brand, sku, description, last_recorded_qty, last_recorded_date')
+      .eq('is_active', true)
+      .eq('last_recorded_qty', 0)
+      .order('id'))
+    if (error) {
+      topbarSubtitle.textContent = ''
+      content.innerHTML = `<div class="empty-state">Couldn't load stock-outs: ${error.message}</div>`
+      return
+    }
+    stockOutRows = data || []
+
+    const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    const dealerByAccno = new Map(currentDealers.map(d => [Number(d.accno), d]))
+    const f = stockOutFilters
+
+    topbarRight.innerHTML = `
+      <div class="search-wrap">
+        <input class="search-input" id="soSearch" type="text" placeholder="Search dealer, rep or item" value="${esc(f.q)}" style="width:240px;">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="7"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+      </div>
+      <div class="date-range">
+        <span>Last recorded</span>
+        <input id="soFrom" type="date" value="${esc(f.from)}" aria-label="Last recorded from">
+        <span>to</span>
+        <input id="soTo" type="date" value="${esc(f.to)}" aria-label="Last recorded to">
+      </div>
+      <button class="topbar-clear" id="soClear" style="display:none;">Clear</button>
+    `
+    listHeaderRow.style.display = 'grid'
+    listHeaderRow.classList.add('stockouts-header')
+
+    function draw() {
+      // Every word typed has to match somewhere on the line (dealer, account
+      // number, rep, brand, SKU or description) - so "alpha echo" narrows
+      // to Alpha's Echo lines.
+      const tokens = f.q.toLowerCase().split(/\s+/).filter(Boolean)
+      const anyFilter = tokens.length > 0 || !!f.from || !!f.to
+
+      let rows = stockOutRows.map(r => {
+        const d = dealerByAccno.get(Number(r.accno))
+        return {
+          ...r,
+          dealerKnown: !!d,
+          dealerName: d ? d.name : `Account #${r.accno}`,
+          repName: d?.rep_name || '',
+          date: r.last_recorded_date ? String(r.last_recorded_date).slice(0, 10) : '',
+        }
+      }).filter(r => {
+        if (tokens.length) {
+          const hay = `${r.dealerName} ${r.accno} ${r.repName} ${r.brand || ''} ${r.sku || ''} ${r.description || ''}`.toLowerCase()
+          if (!tokens.every(t => hay.includes(t))) return false
+        }
+        if (f.from && (!r.date || r.date < f.from)) return false
+        if (f.to && (!r.date || r.date > f.to)) return false
+        return true
+      })
+
+      const dir = stockOutSort.dir === 'asc' ? 1 : -1
+      const sortVal = {
+        dealer: r => r.dealerName.toLowerCase(),
+        item: r => `${r.brand || ''} ${r.sku || ''}`.toLowerCase(),
+        rep: r => r.repName.toLowerCase(),
+        date: r => r.date,
+      }[stockOutSort.key]
+      rows.sort((a, b) => {
+        const av = sortVal(a), bv = sortVal(b)
+        // lines with nothing to sort on always sink to the bottom
+        if (!av && !bv) return 0
+        if (!av) return 1
+        if (!bv) return -1
+        return av < bv ? -dir : av > bv ? dir : 0
+      })
+
+      const dealerCount = new Set(rows.map(r => r.accno)).size
+      topbarSubtitle.textContent =
+        `${rows.length} zero-stock line${rows.length === 1 ? '' : 's'} · ${dealerCount} dealer${dealerCount === 1 ? '' : 's'}` +
+        (anyFilter ? ` (filtered from ${stockOutRows.length})` : '')
+      document.getElementById('soClear').style.display = anyFilter ? '' : 'none'
+
+      const arrow = (key) => stockOutSort.key === key ? (stockOutSort.dir === 'asc' ? ' ▲' : ' ▼') : ''
+      const sorted = (key) => stockOutSort.key === key ? 'sorted' : ''
+      listHeaderRow.innerHTML = `
+        <div class="col ${sorted('dealer')}" data-sort="dealer">Dealer${arrow('dealer')}</div>
+        <div class="col ${sorted('item')}" data-sort="item">Item${arrow('item')}</div>
+        <div class="col ${sorted('rep')}" data-sort="rep">Rep${arrow('rep')}</div>
+        <div class="col right ${sorted('date')}" data-sort="date">Last recorded${arrow('date')}</div>
+      `
+      listHeaderRow.querySelectorAll('.col[data-sort]').forEach(col => {
+        col.addEventListener('click', () => {
+          const key = col.dataset.sort
+          if (stockOutSort.key === key) stockOutSort.dir = stockOutSort.dir === 'asc' ? 'desc' : 'asc'
+          else stockOutSort = { key, dir: key === 'date' ? 'desc' : 'asc' }
+          draw()
+        })
+      })
+
+      if (rows.length === 0) {
+        content.innerHTML = `<div class="empty-state">${anyFilter ? 'Nothing matches these filters.' : 'No zero-stock lines have been recorded.'}</div>`
+        return
+      }
+      content.innerHTML = rows.map(r => `
+        <div class="account-row stockout-row ${r.dealerKnown ? '' : 'no-link'}" ${r.dealerKnown ? `data-accno="${r.accno}"` : ''}>
+          <div class="col">
+            <div class="acc-name">${esc(r.dealerName)}</div>
+            <div class="acc-sub">${r.dealerKnown ? `Acc #${r.accno}` : 'Not in dealer list'}</div>
+          </div>
+          <div class="col">
+            <div class="acc-name">${esc(r.brand || '')}${r.brand && r.sku ? ' · ' : ''}${esc(r.sku || '')}</div>
+            <div class="acc-sub">${esc(r.description || '')}</div>
+          </div>
+          <div class="col">${esc(r.repName) || '—'}</div>
+          <div class="col right">
+            ${r.date ? daysAgoLabel(r.date) : '—'}
+            <div class="acc-sub">${r.date ? formatNZDate(r.date) : ''}</div>
+          </div>
+        </div>
+      `).join('')
+      content.querySelectorAll('.account-row[data-accno]').forEach(row => {
+        row.addEventListener('click', () => showAccountDetail(Number(row.dataset.accno)))
+      })
+    }
+
+    document.getElementById('soSearch').addEventListener('input', (e) => { f.q = e.target.value; draw() })
+    document.getElementById('soFrom').addEventListener('input', (e) => { f.from = e.target.value; draw() })
+    document.getElementById('soTo').addEventListener('input', (e) => { f.to = e.target.value; draw() })
+    document.getElementById('soClear').addEventListener('click', () => {
+      f.q = f.from = f.to = ''
+      document.getElementById('soSearch').value = ''
+      document.getElementById('soFrom').value = ''
+      document.getElementById('soTo').value = ''
+      draw()
+    })
+    draw()
+  }
+
   async function renderSpecialsAdmin() {
     document.getElementById('listHeaderRow').style.display = 'none'
     if (!currentIsManager) { renderAccountsList(); return }
@@ -1085,12 +1425,14 @@
       <div class="nav-item" id="navMyDealers">My Dealers</div>
       <div class="nav-item" id="navAllDealers">All Dealers</div>
       <div class="nav-item" id="navStockLookup">Stock Lookup</div>
+      <div class="nav-item" id="navStockOuts">Stock-outs</div>
       <div class="nav-item active" id="navSpecials">Specials</div>
     `)
     wireLogout()
     document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
     document.getElementById('navAllDealers').onclick = () => { repFilter = 'all'; renderAccountsList() }
     document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+    document.getElementById('navStockOuts').onclick = () => renderStockOuts()
     document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
 
     topbarTitle.textContent = 'Monthly Specials'
@@ -1152,7 +1494,13 @@
           statusEl.textContent = 'Paste at least one part number first.'
           return
         }
-        if (!confirm(`Replace the entire ${label} list with these ${codes.length} part number(s)? This can't be undone.`)) return
+        const okToReplace = await appConfirm({
+          title: `Replace the ${label} list?`,
+          message: `This replaces the entire list with the ${codes.length} part number${codes.length === 1 ? '' : 's'} you pasted. It can't be undone.`,
+          confirmLabel: 'Replace list',
+          cancelLabel: 'Cancel',
+        })
+        if (!okToReplace) return
 
         statusEl.textContent = 'Saving…'
         const { error: saveError } = await supabase.rpc('replace_monthly_specials', {
@@ -1212,6 +1560,7 @@
         <div class="nav-section-label">${dealerName || 'Account'}</div>
         <div class="nav-item ${activeTab === 'overview' ? 'active' : ''}" id="navOverview">Overview</div>
         <div class="nav-item ${activeTab === 'wholegoods' ? 'active' : ''}" id="navWholegoods">Wholegoods &amp; ranges</div>
+        <div class="nav-item ${activeTab === 'standstock' ? 'active' : ''}" id="navStandStock">Cama Stand Stock</div>
         <div class="nav-item ${activeTab === 'callnotes' ? 'active' : ''}" id="navCallNotes">Call notes</div>
         <div class="nav-item ${activeTab === 'contacts' ? 'active' : ''}" id="navContacts">Contacts</div>
         <div class="nav-item ${activeTab === 'stocklookup' ? 'active' : ''}" id="navStockLookupDetail">Stock Lookup</div>
@@ -1221,6 +1570,7 @@
     document.getElementById('navBackToAccounts').onclick = () => renderAccountsList()
     document.getElementById('navOverview').onclick = () => showAccountDetail(accno)
     document.getElementById('navWholegoods').onclick = () => showWholegoodsTab(accno)
+    document.getElementById('navStandStock').onclick = () => showStandStockTab(accno)
     document.getElementById('navCallNotes').onclick = () => showCallNotesTab(accno)
     document.getElementById('navContacts').onclick = () => showContactsTab(accno)
     document.getElementById('navStockLookupDetail').onclick = () => renderStockLookup(accno, dealerName)
@@ -1495,6 +1845,10 @@
 
   function computeAutoStatus(entry) {
     if (entry.isNew) return 'new'
+    // Removing a line from the checklist is a real change even when the
+    // quantity is already 0 (0 -> 0) - without this, removing an item
+    // that was already at zero was silently ignored at Send Report.
+    if (entry.markedForRemoval) return 'updated'
     if (Number(entry.qty) !== Number(entry.last_recorded_qty)) return 'updated'
     return entry.confirmed ? 'confirmed' : 'untouched'
   }
@@ -1549,9 +1903,20 @@
 
   function checklistLineHtml(entry) {
     const status = computeAutoStatus(entry)
+    const statusLabel = status === 'untouched' ? 'not checked' : status
     const qtyDecreased = !entry.isNew && entry.last_recorded_qty !== null &&
       Number(entry.qty) < Number(entry.last_recorded_qty)
     const showRemoveOption = !entry.isNew && Number(entry.qty) === 0
+    // The reason box shows for a drop in quantity, for any line marked for
+    // removal, and for any existing line sitting at zero - so the rep can
+    // say why it isn't being restocked without having to change anything.
+    const sittingAtZero = !entry.isNew && Number(entry.qty) === 0
+    const showNote = qtyDecreased || entry.markedForRemoval || sittingAtZero
+    const notePlaceholder = entry.markedForRemoval
+      ? 'Reason for removing this line (required)'
+      : qtyDecreased
+        ? 'Why the drop? e.g. restock next month'
+        : 'Why is this at zero? e.g. not restocking until spring'
     return `
       <div class="stock-line-wrap">
         <div class="stock-line status-${status}">
@@ -1560,30 +1925,32 @@
               <div class="stock-line-title">${entry.brand || ''}${entry.brand && entry.sku ? ' · ' : ''}${entry.sku || ''}</div>
               <div class="stock-line-sub">${entry.description || ''}</div>
             </div>
-            <div class="remove-item-slot">
+            <div class="stock-line-controls">
+              <div class="stock-line-last">${entry.isNew ? 'New line' : `Last recorded: ${entry.last_recorded_qty}`}</div>
+              <div class="qty-stepper">
+                <button class="qty-step-btn" data-id="${entry.id}" data-dir="-1">−</button>
+                <input class="stock-line-qty" type="number" min="0" data-id="${entry.id}" value="${entry.qty}">
+                <button class="qty-step-btn" data-id="${entry.id}" data-dir="1">+</button>
+              </div>
+              <div class="stock-line-status-tag">${statusLabel}</div>
+              <label class="toggle-switch">
+                <input type="checkbox" ${entry.confirmed ? 'checked' : ''} data-id="${entry.id}" class="stock-toggle">
+                <span class="toggle-slider"></span>
+              </label>
+              ${orderButtonHtml(entry.sku, entry.description)}
+            </div>
+          </div>
+          ${showRemoveOption || showNote ? `
+            <div class="stock-line-extra">
               ${showRemoveOption ? `
-                <label>
+                <label class="remove-item-label">
                   <input type="checkbox" class="remove-item-checkbox" data-id="${entry.id}" ${entry.markedForRemoval ? 'checked' : ''}>
                   Remove from floor stock checklist - reason required.
                 </label>
               ` : ''}
+              ${showNote ? `<input class="stock-line-note" placeholder="${notePlaceholder}" data-id="${entry.id}" value="${(entry.note || '').replace(/"/g, '&quot;')}">` : ''}
             </div>
-            <div class="stock-line-note-slot">
-              ${qtyDecreased ? `<input class="stock-line-note" placeholder="Why the drop? e.g. restock next month" data-id="${entry.id}" value="${entry.note || ''}">` : ''}
-            </div>
-            <div class="stock-line-last">${entry.isNew ? 'New line' : `Last recorded: ${entry.last_recorded_qty}`}</div>
-            <div class="qty-stepper">
-              <button class="qty-step-btn" data-id="${entry.id}" data-dir="-1">−</button>
-              <input class="stock-line-qty" type="number" min="0" data-id="${entry.id}" value="${entry.qty}">
-              <button class="qty-step-btn" data-id="${entry.id}" data-dir="1">+</button>
-            </div>
-            <div class="stock-line-status-tag">${status}</div>
-            <label class="toggle-switch">
-              <input type="checkbox" ${entry.confirmed ? 'checked' : ''} data-id="${entry.id}" class="stock-toggle">
-              <span class="toggle-slider"></span>
-            </label>
-            ${orderButtonHtml(entry.sku, entry.description)}
-          </div>
+          ` : ''}
         </div>
       </div>`
   }
@@ -1593,6 +1960,7 @@
     const confirmedCount = entries.filter(e => computeAutoStatus(e) === 'confirmed').length
     const updatedCount = entries.filter(e => computeAutoStatus(e) === 'updated').length
     const newCount = entries.filter(e => computeAutoStatus(e) === 'new').length
+    const uncheckedCount = entries.filter(e => computeAutoStatus(e) === 'untouched').length
     const hasChanges = confirmedCount + updatedCount + newCount > 0
 
     const byStock = new Map()
@@ -1677,6 +2045,7 @@
         <div class="send-report-bar">
           <div class="report-summary">
             ${hasChanges ? `${confirmedCount} confirmed · ${updatedCount} updated · ${newCount} new` : 'No changes yet'}
+            ${uncheckedCount > 0 ? `&nbsp;·&nbsp; <strong style="color:var(--warn);">${uncheckedCount} not checked yet</strong>` : ''}
             &nbsp;·&nbsp; ${orderSummary}
           </div>
         </div>
@@ -1707,7 +2076,8 @@
     function clearNoteIfNoLongerADecrease(id) {
       const e = checklistState[id]
       const stillADecrease = !e.isNew && e.last_recorded_qty !== null && Number(e.qty) < Number(e.last_recorded_qty)
-      if (!stillADecrease) { e.note = ''; e.markedForRemoval = false }
+      const atZero = !e.isNew && Number(e.qty) === 0
+      if (!stillADecrease && !atZero) { e.note = ''; e.markedForRemoval = false }
     }
     content.querySelectorAll('.stock-line-qty').forEach(input => {
       input.addEventListener('change', (e) => {
@@ -1730,6 +2100,7 @@
     content.querySelectorAll('.remove-item-checkbox').forEach(cb => {
       cb.addEventListener('change', (e) => {
         checklistState[e.target.dataset.id].markedForRemoval = e.target.checked
+        renderWholegoodsPage(accno, dealerName)
       })
     })
     content.querySelectorAll('.stock-toggle').forEach(toggle => {
@@ -1854,7 +2225,7 @@
         last_recorded_qty: qty, last_recorded_date: today,
       }).select().single()
       if (error) {
-        alert('Could not save: ' + error.message)
+        appAlert('Could not save: ' + error.message, "Couldn't save")
         confirmQuickAddBtn.disabled = false
         confirmQuickAddBtn.textContent = 'Save now'
         return
@@ -1906,6 +2277,298 @@
     })
   }
 
+  // ---------- CAMA STAND STOCK TAB ----------
+  // Hangsell lines on a dealer's display stand. Deliberately lighter than the
+  // Wholegoods checklist: quantity changes and new lines save straight away,
+  // the checked toggle only lives for this visit, and none of it goes into
+  // the Send Report email.
+  let standRows = []
+  let standChecked = {}        // line id -> true, this visit only
+  let standSaveTimers = {}
+  let standVisited = false     // stand tab opened during this visit
+  let standAddedSkus = []      // lines the rep added during this visit
+  let standPendingRemoval = {} // line id -> true: flagged now, removed at Send Report
+
+  // The stand part of the call report email. Counts only - the individual
+  // checks aren't listed - plus anything added or removed this visit.
+  function standEmailSection(notOpenedCount) {
+    if (!standVisited) {
+      return notOpenedCount > 0
+        ? `\nCAMA STAND STOCK: not opened this visit (${notOpenedCount} item${notOpenedCount === 1 ? '' : 's'} on the list).\n`
+        : ''
+    }
+    const active = standRows.filter(r => !standPendingRemoval[r.id])
+    const removed = standRows.filter(r => standPendingRemoval[r.id])
+    const checked = active.filter(r => standChecked[r.id]).length
+    const added = standAddedSkus.filter(sku => active.some(r => r.sku === sku))
+    let out = `\nCAMA STAND STOCK:\n${active.length} item${active.length === 1 ? '' : 's'}\n${checked} checked\n`
+    if (added.length > 0) out += `${added.length} added (${added.join(', ')})\n`
+    removed.forEach(r => { out += `${r.sku} removed\n` })
+    return out
+  }
+
+  const standSort = (rows) => rows.sort((a, b) => a.sku.localeCompare(b.sku, undefined, { numeric: true, sensitivity: 'base' }))
+
+  // Descriptions live in one place only - stand_products - so fixing one there
+  // fixes it on every dealer's list. A line whose part number isn't in that
+  // list (e.g. one added "as typed") just shows no description until it is.
+  async function fetchStandDescriptions(skus) {
+    const map = new Map()
+    for (let i = 0; i < skus.length; i += 100) {
+      const { data, error } = await supabase
+        .from('stand_products')
+        .select('stockcode, description')
+        .in('stockcode', skus.slice(i, i + 100))
+      if (error) return { map, error }
+      ;(data || []).forEach(p => map.set(p.stockcode.toLowerCase(), p.description || ''))
+    }
+    return { map, error: null }
+  }
+
+  async function showStandStockTab(accno) {
+    resetVisitIfNewDealer(accno)
+    document.getElementById('listHeaderRow').style.display = 'none'
+    const dealer = currentDealers.find(d => d.accno === accno)
+    renderDetailSidebar(dealer ? dealer.name : null, accno, 'standstock')
+    topbarTitle.textContent = dealer ? dealer.name : 'Account'
+    topbarSubtitle.textContent = `Account #${accno}`
+    topbarRight.innerHTML = ''
+    content.innerHTML = `<div class="empty-state">Loading…</div>`
+
+    const { data, error } = await supabase
+      .from('dealer_stand_stock')
+      .select('id, sku, qty')
+      .eq('accno', accno)
+      .order('sku')
+    if (error) {
+      content.innerHTML = `<div class="empty-state">Couldn't load stand stock: ${error.message}</div>`
+      return
+    }
+    const lines = data || []
+    const { map: descBySku, error: descError } = await fetchStandDescriptions(lines.map(l => l.sku))
+    if (descError) {
+      content.innerHTML = `<div class="empty-state">Couldn't load stand stock: ${descError.message}</div>`
+      return
+    }
+    standRows = standSort(lines.map(l => ({ ...l, description: descBySku.get(l.sku.toLowerCase()) || '' })))
+    standVisited = true
+    renderStandStockPage(accno)
+  }
+
+  function queueStandQtySave(id, qty) {
+    clearTimeout(standSaveTimers[id])
+    standSaveTimers[id] = setTimeout(async () => {
+      const { error } = await supabase.from('dealer_stand_stock')
+        .update({ qty, last_updated: new Date().toISOString() })
+        .eq('id', id)
+      if (error) appAlert('The new quantity could not be saved: ' + error.message, "Couldn't save")
+    }, 500)
+  }
+
+  async function addStandLine(accno, sku, description) {
+    sku = (sku || '').trim()
+    if (!sku) return
+    const existing = standRows.find(r => r.sku.toLowerCase() === sku.toLowerCase())
+    if (existing) {
+      appAlert(
+        standPendingRemoval[existing.id]
+          ? `${existing.sku} is flagged for removal - tap Undo on that line if you want to keep it.`
+          : `${sku} is already on this dealer's stand list.`,
+        'Already on the stand')
+      return
+    }
+    const { data, error } = await supabase.from('dealer_stand_stock')
+      .insert({ accno, sku, qty: 0 })
+      .select('id, sku, qty')
+      .single()
+    if (error) {
+      appAlert('Could not add that line: ' + error.message, "Couldn't add")
+      return
+    }
+    standRows = standSort(standRows.concat([{ ...data, description: description || '' }]))
+    standAddedSkus.push(data.sku)
+    renderStandStockPage(accno, { refocusSearch: true })
+  }
+
+  function renderStandStockPage(accno, opts = {}) {
+    const scrollTop = content.scrollTop
+    const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+    const rowsHtml = standRows.map(r => `
+      <div class="stand-row ${standPendingRemoval[r.id] ? 'pending-remove' : (standChecked[r.id] ? 'checked' : '')}" data-id="${r.id}">
+        <div class="stand-sku" title="${esc(r.sku)}">${esc(r.sku)}</div>
+        <div class="stand-desc" title="${esc(r.description || '')}">${r.description ? esc(r.description) : '<span style="font-style:italic; color:var(--slate-dim);">not in the stand product list</span>'}</div>
+        <div class="qty-stepper">
+          <button class="stand-step-btn" data-id="${r.id}" data-dir="-1">−</button>
+          <input class="stand-qty" type="number" min="0" data-id="${r.id}" value="${r.qty}">
+          <button class="stand-step-btn" data-id="${r.id}" data-dir="1">+</button>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" class="stand-toggle" data-id="${r.id}" ${standChecked[r.id] ? 'checked' : ''}>
+          <span class="toggle-slider"></span>
+        </label>
+        <div>${orderButtonHtml(r.sku, r.description)}</div>
+        ${standPendingRemoval[r.id]
+          ? `<button class="stand-undo" data-id="${r.id}">Undo</button>`
+          : `<button class="stand-remove" data-id="${r.id}" title="Take off this stand" aria-label="Remove line">✕</button>`}
+      </div>`).join('')
+
+    content.innerHTML = `
+      <div class="detail-section">
+        <h2>Cama Stand Stock <span class="acc-sub" id="standSummary" style="font-weight:400; margin-left:8px;"></span></h2>
+        ${standRows.length === 0
+          ? `<div class="placeholder-note">No stand lines for this dealer yet - add the first one below.</div>`
+          : `<div class="stand-head"><div>Part no.</div><div>Description</div><div>Qty</div><div>Checked</div><div></div><div></div></div>${rowsHtml}`}
+        <div class="stand-add">
+          <div class="search-wrap" style="display:block;">
+            <input class="search-input" id="standSearch" type="text" autocomplete="off" placeholder="Add a line - search part number or description" style="width:100%;">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="7"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <div class="stock-search-results" id="standResults" style="display:none;"></div>
+          </div>
+        </div>
+      </div>`
+    content.scrollTop = scrollTop
+
+    function updateSummary() {
+      const active = standRows.filter(r => !standPendingRemoval[r.id])
+      const flagged = standRows.length - active.length
+      const checked = active.filter(r => standChecked[r.id]).length
+      const el = document.getElementById('standSummary')
+      if (el) el.textContent = standRows.length === 0 ? '' :
+        `${active.length} line${active.length === 1 ? '' : 's'} · ${checked} checked` +
+        (flagged > 0 ? ` · ${flagged} flagged for removal` : '')
+    }
+    updateSummary()
+
+    function setQty(id, value, rowEl) {
+      const qty = Math.max(0, Math.round(Number(value) || 0))
+      const row = standRows.find(r => r.id === id)
+      if (!row) return
+      row.qty = qty
+      const input = rowEl.querySelector('.stand-qty')
+      if (input) input.value = qty
+      queueStandQtySave(id, qty)
+    }
+    content.querySelectorAll('.stand-step-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = Number(btn.dataset.id)
+        const row = standRows.find(r => r.id === id)
+        if (row) setQty(id, row.qty + Number(btn.dataset.dir), btn.closest('.stand-row'))
+      })
+    })
+    content.querySelectorAll('.stand-qty').forEach(input => {
+      input.addEventListener('change', () => setQty(Number(input.dataset.id), input.value, input.closest('.stand-row')))
+    })
+    content.querySelectorAll('.stand-toggle').forEach(toggle => {
+      toggle.addEventListener('change', () => {
+        const id = Number(toggle.dataset.id)
+        if (toggle.checked) standChecked[id] = true
+        else delete standChecked[id]
+        toggle.closest('.stand-row').classList.toggle('checked', toggle.checked)
+        updateSummary()
+      })
+    })
+    content.querySelectorAll('.stand-remove').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = Number(btn.dataset.id)
+        const row = standRows.find(r => r.id === id)
+        if (!row) return
+        const label = `${row.sku}${row.description ? ' - ' + row.description : ''}`
+        if (standAddedSkus.includes(row.sku)) {
+          // Added during this visit - taking it off again is just fixing a
+          // mistake, so it goes straight away and isn't reported.
+          const okNow = await appConfirm({
+            title: 'Remove the line you just added?',
+            message: `${label} was added during this visit, so it will simply be taken off again.`,
+            confirmLabel: 'Remove',
+            cancelLabel: 'Cancel',
+          })
+          if (!okNow) return
+          const { error } = await supabase.from('dealer_stand_stock').delete().eq('id', id)
+          if (error) { appAlert('Could not remove that line: ' + error.message, "Couldn't remove"); return }
+          clearTimeout(standSaveTimers[id])
+          standRows = standRows.filter(r => r.id !== id)
+          standAddedSkus = standAddedSkus.filter(sku => sku !== row.sku)
+          delete standChecked[id]
+          renderStandStockPage(accno)
+          return
+        }
+        const ok = await appConfirm({
+          title: 'Take this line off the stand?',
+          message: `${label}\n\nThis will be flagged for removal and listed in your call report email. It only comes off the stand when you send the report - you can undo it until then.`,
+          confirmLabel: 'Flag for removal',
+          cancelLabel: 'Cancel',
+        })
+        if (!ok) return
+        standPendingRemoval[id] = true
+        delete standChecked[id]
+        renderStandStockPage(accno)
+      })
+    })
+    content.querySelectorAll('.stand-undo').forEach(btn => {
+      btn.addEventListener('click', () => {
+        delete standPendingRemoval[Number(btn.dataset.id)]
+        renderStandStockPage(accno)
+      })
+    })
+    content.querySelectorAll('.order-btn[data-ordersku]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentOrderList.push({ sku: btn.dataset.ordersku, description: btn.dataset.orderdesc, qty: 1 })
+        renderStandStockPage(accno)
+      })
+    })
+
+    // Add a line: search the stand product list, tap a result to add it.
+    const searchEl = document.getElementById('standSearch')
+    const resultsEl = document.getElementById('standResults')
+    let searchTimer = null
+    searchEl.addEventListener('input', (e) => {
+      clearTimeout(searchTimer)
+      const raw = e.target.value.trim()
+      if (raw.length < 2) { resultsEl.style.display = 'none'; resultsEl.innerHTML = ''; return }
+      searchTimer = setTimeout(async () => {
+        const q = raw.replace(/[,()%*\\]/g, ' ').trim()
+        resultsEl.style.display = 'block'
+        resultsEl.innerHTML = `<div class="stock-search-result">Searching…</div>`
+        const { data, error } = await supabase
+          .from('stand_products')
+          .select('stockcode, description')
+          .or(`stockcode.ilike.%${q}%,description.ilike.%${q}%`)
+          .order('stockcode')
+          .limit(15)
+        if (searchEl.value.trim() !== raw) return   // typed on since - ignore the stale answer
+        if (error) { resultsEl.innerHTML = `<div class="stock-search-result">Search failed: ${esc(error.message)}</div>`; return }
+        const found = data || []
+        const exact = found.some(r => r.stockcode.toLowerCase() === raw.toLowerCase())
+        // If it looks like a part number and isn't in the list, still let
+        // the rep add it as typed rather than being stuck mid-call.
+        const looksLikeAPart = !/\s/.test(raw) && raw.length >= 3
+        let html = found.map(r => `
+          <div class="stock-search-result" data-sku="${esc(r.stockcode)}" data-desc="${esc(r.description || '')}">
+            <strong>${esc(r.stockcode)}</strong> — ${esc(r.description || '')}
+          </div>`).join('')
+        if (!exact && looksLikeAPart) {
+          html += `<div class="stock-search-result" data-sku="${esc(raw)}" data-desc="">Not in the list? Add <strong>${esc(raw)}</strong> as typed</div>`
+        }
+        if (!html) html = `<div class="stock-search-result">No match for "${esc(raw)}".</div>`
+        resultsEl.innerHTML = html
+        resultsEl.querySelectorAll('[data-sku]').forEach(row => {
+          // mousedown, not click - fires before the input's blur hides the list
+          row.addEventListener('mousedown', (ev) => {
+            ev.preventDefault()
+            resultsEl.style.display = 'none'
+            addStandLine(accno, row.dataset.sku, row.dataset.desc)
+          })
+        })
+      }, 250)
+    })
+    searchEl.addEventListener('blur', () => { setTimeout(() => { resultsEl.style.display = 'none' }, 150) })
+    if (opts.refocusSearch) searchEl.focus()
+  }
+
   // ---------- CALL NOTES TAB ----------
   async function showCallNotesTab(accno) {
     resetVisitIfNewDealer(accno)
@@ -1945,6 +2608,7 @@
     const confirmedCount = stockEntries.filter(e => computeAutoStatus(e) === 'confirmed').length
     const updatedEntries = stockEntries.filter(e => computeAutoStatus(e) === 'updated')
     const newEntries = stockEntries.filter(e => computeAutoStatus(e) === 'new')
+    const uncheckedStockCount = stockEntries.filter(e => computeAutoStatus(e) === 'untouched').length
     const hasStockChanges = confirmedCount + updatedEntries.length + newEntries.length > 0
 
     const followupsHtml = cachedFollowups.map(f => `
@@ -1998,7 +2662,7 @@
         <div class="detail-section">
           <h2>This visit's stock changes</h2>
           ${hasStockChanges
-            ? `<div class="report-summary">${confirmedCount} confirmed · ${updatedEntries.length} updated · ${newEntries.length} new</div>`
+            ? `<div class="report-summary">${confirmedCount} confirmed · ${updatedEntries.length} updated · ${newEntries.length} new${uncheckedStockCount > 0 ? ` · <strong style="color:var(--warn);">${uncheckedStockCount} not checked yet</strong>` : ''}</div>`
             : `<div class="placeholder-note">No stock changes recorded this visit yet — open the Wholegoods tab to work through the floor stock checklist.</div>`}
         </div>
         <div class="detail-section">
@@ -2032,7 +2696,7 @@
       const btn = document.getElementById('addFollowupBtn')
       btn.disabled = true
       const { error } = await supabase.from('dealer_followups').insert({ accno, note: text, created_by: currentUserLabel })
-      if (error) { alert('Could not save note: ' + error.message); btn.disabled = false; return }
+      if (error) { appAlert('Could not save note: ' + error.message, "Couldn't save"); btn.disabled = false; return }
       const { data } = await supabase.from('dealer_followups').select('*').eq('accno', accno).eq('is_resolved', false).order('created_at', { ascending: false })
       cachedFollowups = data || []
       renderCallNotesPage(accno, dealerName)
@@ -2104,10 +2768,63 @@
     const updated = entries.filter(e => computeAutoStatus(e) === 'updated')
     const newLines = entries.filter(e => computeAutoStatus(e) === 'new')
 
+    // Floor stock lines the rep neither ticked nor changed.
+    const unchecked = entries.filter(e => computeAutoStatus(e) === 'untouched')
+
+    // The checklist only loads when the Wholegoods tab is opened, so a rep
+    // who never opened it would otherwise skip the whole check unnoticed.
+    let checklistNeverOpened = 0
+    if (!wholegoodsInitialized) {
+      const { count } = await supabase.from('dealer_floor_stock')
+        .select('id', { count: 'exact', head: true })
+        .eq('accno', accno).eq('is_active', true)
+      checklistNeverOpened = count || 0
+    }
+
+    if (unchecked.length > 0 || checklistNeverOpened > 0) {
+      let dialog
+      if (checklistNeverOpened > 0) {
+        dialog = {
+          title: 'Floor stock checklist not opened',
+          message: `This dealer has ${checklistNeverOpened} item${checklistNeverOpened === 1 ? '' : 's'} on the floor stock checklist and it hasn't been opened this visit. Go back to work through it, or send anyway and the email will say it wasn't checked.`,
+        }
+      } else {
+        const items = unchecked.slice(0, 10).map(e => `${e.brand || ''} ${e.sku || ''}`.trim() + (e.description ? ` - ${e.description}` : ''))
+        if (unchecked.length > 10) items.push(`...and ${unchecked.length - 10} more`)
+        dialog = {
+          title: `${unchecked.length} floor stock item${unchecked.length === 1 ? '' : 's'} not checked`,
+          message: `These lines haven't been ticked or changed. Go back to check them (switch the toggle on, or change the quantity), or send anyway and they'll be listed as NOT CHECKED in the email.`,
+          items,
+        }
+      }
+      const sendAnyway = await appConfirm({
+        ...dialog,
+        confirmLabel: 'Send anyway',
+        cancelLabel: 'Go back and check',
+        primary: 'cancel',
+      })
+      if (!sendAnyway) {
+        btn.disabled = false
+        btn.textContent = 'Send Report'
+        return
+      }
+    }
+
+    // Cama Stand Stock: if the stand tab was never opened, note how many
+    // lines this dealer's stand has so the email can say it wasn't checked.
+    let standNotOpenedCount = 0
+    if (!standVisited) {
+      const { count } = await supabase.from('dealer_stand_stock')
+        .select('id', { count: 'exact', head: true })
+        .eq('accno', accno)
+      standNotOpenedCount = count || 0
+    }
+    const standRemovedRows = standVisited ? standRows.filter(r => standPendingRemoval[r.id]) : []
+
     // Anything marked for removal needs an actual reason before we'll send.
     const missingReason = updated.find(e => e.markedForRemoval && !e.note?.trim())
     if (missingReason) {
-      alert(`"${missingReason.brand || ''} ${missingReason.sku || ''}" is marked for removal but has no reason in the notes box - add one before sending.`)
+      await appAlert(`"${missingReason.brand || ''} ${missingReason.sku || ''}" is marked for removal but has no reason - add one in the box under that line before sending.`, 'Reason needed')
       btn.disabled = false
       btn.textContent = 'Send Report'
       return
@@ -2136,13 +2853,19 @@
         })
         if (error) throw error
       }
+      // Lines flagged for removal on the stand come off only now, as the
+      // report goes out - which is also what puts them in the email.
+      if (standRemovedRows.length > 0) {
+        const { error } = await supabase.from('dealer_stand_stock').delete().in('id', standRemovedRows.map(r => r.id))
+        if (error) throw error
+      }
       const { error: callLogError } = await supabase.from('call_logs').insert({
         accno, rep_salesno: currentStaffno, visit_date: today,
         call_notes: currentCallNotes, order_items: currentOrderList,
       })
       if (callLogError) throw callLogError
     } catch (err) {
-      alert('Something went wrong sending the report: ' + err.message)
+      await appAlert('Something went wrong sending the report: ' + err.message, "Couldn't send report")
       btn.disabled = false
       btn.textContent = 'Send Report'
       return
@@ -2153,7 +2876,7 @@
 
     const allChecked = confirmed.concat(updated).concat(newLines)
     body += `STOCK CHECK (${allChecked.length} item${allChecked.length === 1 ? '' : 's'} checked):\n`
-    confirmed.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''}: ${e.qty} (confirmed)\n` })
+    confirmed.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''}: ${e.qty} (confirmed${e.note ? ' - ' + e.note : ''})\n` })
     updated.forEach(e => {
       const isDecrease = Number(e.qty) < Number(e.last_recorded_qty)
       if (e.markedForRemoval) {
@@ -2166,6 +2889,14 @@
     })
     newLines.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''} ${e.description || ''}: ${e.qty} (new)\n` })
     if (allChecked.length === 0) body += `(none)\n`
+    if (unchecked.length > 0) {
+      body += `\nNOT CHECKED (${unchecked.length}):\n`
+      unchecked.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''} (last recorded: ${e.last_recorded_qty}${e.note ? ' - ' + e.note : ''})\n` })
+    } else if (checklistNeverOpened > 0) {
+      body += `\nNOT CHECKED: the floor stock checklist was not opened (${checklistNeverOpened} item${checklistNeverOpened === 1 ? '' : 's'} on it).\n`
+    }
+
+    body += standEmailSection(standNotOpenedCount)
 
     body += `\nORDER (${currentOrderList.length} item${currentOrderList.length === 1 ? '' : 's'}):\n`
     if (currentOrderList.length === 0) body += `(none)\n`
@@ -2182,6 +2913,10 @@
     currentVisitAccno = null
     currentOrderList = []
     checklistState = {}
+    standChecked = {}
+    standVisited = false
+    standAddedSkus = []
+    standPendingRemoval = {}
     wholegoodsInitialized = false
     currentCallNotes = ''
     callNotesInitialized = false
