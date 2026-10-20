@@ -331,7 +331,7 @@
     cursor: pointer; padding: 6px 4px; white-space: nowrap;
   }
   .topbar-clear:hover { text-decoration: underline; }
-  /* Cama Stand Stock: deliberately dense - one slim line per product. */
+  /* Accessories (display stand lines): deliberately dense - one slim line per product. */
   .stand-head, .stand-row {
     display: grid; grid-template-columns: 120px minmax(0, 1fr) 108px 58px 106px 44px;
     gap: 10px; align-items: center; padding: 5px 14px;
@@ -1560,7 +1560,7 @@
         <div class="nav-section-label">${dealerName || 'Account'}</div>
         <div class="nav-item ${activeTab === 'overview' ? 'active' : ''}" id="navOverview">Overview</div>
         <div class="nav-item ${activeTab === 'wholegoods' ? 'active' : ''}" id="navWholegoods">Wholegoods &amp; ranges</div>
-        <div class="nav-item ${activeTab === 'standstock' ? 'active' : ''}" id="navStandStock">Cama Stand Stock</div>
+        <div class="nav-item ${activeTab === 'standstock' ? 'active' : ''}" id="navStandStock">Accessories</div>
         <div class="nav-item ${activeTab === 'callnotes' ? 'active' : ''}" id="navCallNotes">Call notes</div>
         <div class="nav-item ${activeTab === 'contacts' ? 'active' : ''}" id="navContacts">Contacts</div>
         <div class="nav-item ${activeTab === 'stocklookup' ? 'active' : ''}" id="navStockLookupDetail">Stock Lookup</div>
@@ -2277,7 +2277,7 @@
     })
   }
 
-  // ---------- CAMA STAND STOCK TAB ----------
+  // ---------- ACCESSORIES TAB (the dealer's display stand + accessories purchase history) ----------
   // Hangsell lines on a dealer's display stand. Deliberately lighter than the
   // Wholegoods checklist: quantity changes and new lines save straight away,
   // the checked toggle only lives for this visit, and none of it goes into
@@ -2288,20 +2288,22 @@
   let standVisited = false     // stand tab opened during this visit
   let standAddedSkus = []      // lines the rep added during this visit
   let standPendingRemoval = {} // line id -> true: flagged now, removed at Send Report
+  let accessoryHistoryRows = []   // purchases of stand_products items, this year + last
+  let accessoryHistoryError = null
 
   // The stand part of the call report email. Counts only - the individual
   // checks aren't listed - plus anything added or removed this visit.
   function standEmailSection(notOpenedCount) {
     if (!standVisited) {
       return notOpenedCount > 0
-        ? `\nCAMA STAND STOCK: not opened this visit (${notOpenedCount} item${notOpenedCount === 1 ? '' : 's'} on the list).\n`
+        ? `\nACCESSORIES: not opened this visit (${notOpenedCount} item${notOpenedCount === 1 ? '' : 's'} on the list).\n`
         : ''
     }
     const active = standRows.filter(r => !standPendingRemoval[r.id])
     const removed = standRows.filter(r => standPendingRemoval[r.id])
     const checked = active.filter(r => standChecked[r.id]).length
     const added = standAddedSkus.filter(sku => active.some(r => r.sku === sku))
-    let out = `\nCAMA STAND STOCK:\n${active.length} item${active.length === 1 ? '' : 's'}\n${checked} checked\n`
+    let out = `\nACCESSORIES:\n${active.length} item${active.length === 1 ? '' : 's'}\n${checked} checked\n`
     if (added.length > 0) out += `${added.length} added (${added.join(', ')})\n`
     removed.forEach(r => { out += `${r.sku} removed\n` })
     return out
@@ -2335,15 +2337,17 @@
     topbarRight.innerHTML = ''
     content.innerHTML = `<div class="empty-state">Loading…</div>`
 
-    const { data, error } = await supabase
-      .from('dealer_stand_stock')
-      .select('id, sku, qty')
-      .eq('accno', accno)
-      .order('sku')
+    const [{ data, error }, { data: histData, error: histError }] = await Promise.all([
+      supabase.from('dealer_stand_stock').select('id, sku, qty').eq('accno', accno).order('sku'),
+      supabase.rpc('get_accessories_history', { p_accno: accno }),
+    ])
     if (error) {
       content.innerHTML = `<div class="empty-state">Couldn't load stand stock: ${error.message}</div>`
       return
     }
+    // The history is a bonus on this screen: if it can't load, the stand list still works.
+    accessoryHistoryRows = histError ? [] : (histData || [])
+    accessoryHistoryError = histError ? histError.message : null
     const lines = data || []
     const { map: descBySku, error: descError } = await fetchStandDescriptions(lines.map(l => l.sku))
     if (descError) {
@@ -2365,7 +2369,7 @@
     }, 500)
   }
 
-  async function addStandLine(accno, sku, description) {
+  async function addStandLine(accno, sku, description, opts = { refocusSearch: true }) {
     sku = (sku || '').trim()
     if (!sku) return
     const existing = standRows.find(r => r.sku.toLowerCase() === sku.toLowerCase())
@@ -2387,7 +2391,7 @@
     }
     standRows = standSort(standRows.concat([{ ...data, description: description || '' }]))
     standAddedSkus.push(data.sku)
-    renderStandStockPage(accno, { refocusSearch: true })
+    renderStandStockPage(accno, { refocusSearch: !!opts.refocusSearch })
   }
 
   function renderStandStockPage(accno, opts = {}) {
@@ -2413,9 +2417,63 @@
           : `<button class="stand-remove" data-id="${r.id}" title="Take off this stand" aria-label="Remove line">✕</button>`}
       </div>`).join('')
 
+    // Purchase history of the accessories list: this calendar year and last,
+    // same layout as the wholegoods history. Items not yet on this dealer's
+    // stand come first, like range gaps do there.
+    const thisYear = new Date().getFullYear()
+    const histYears = [thisYear - 1, thisYear]
+    function historySectionHtml() {
+      if (accessoryHistoryError) {
+        return `<div class="detail-section"><h2>Accessories purchase history</h2>
+          <div class="placeholder-note">The purchase history couldn't be loaded (${esc(accessoryHistoryError)}).</div></div>`
+      }
+      const byStock = new Map()
+      accessoryHistoryRows.forEach(r => {
+        if (!byStock.has(r.stockcode)) byStock.set(r.stockcode, { stockcode: r.stockcode, description: r.description, byYear: {}, total: 0 })
+        const e = byStock.get(r.stockcode)
+        e.byYear[r.yr] = Number(r.qty)
+        e.total += Number(r.total)
+      })
+      const onStand = (sku) => standRows.some(r => r.sku.toLowerCase() === String(sku).toLowerCase())
+      const items = [...byStock.values()].map(i => ({ ...i, onStand: onStand(i.stockcode) })).sort((a, b) => {
+        if (a.onStand !== b.onStand) return a.onStand ? 1 : -1
+        return b.total - a.total
+      })
+      const gapCount = items.filter(i => !i.onStand).length
+      const rowHtml = (item) => `
+        <tr class="${item.onStand ? '' : 'gap-row'}">
+          <td>${esc(item.stockcode)}</td>
+          <td>${esc(item.description || '—')}</td>
+          ${histYears.map(y => `<td>${item.byYear[y] ? item.byYear[y] : '—'}</td>`).join('')}
+          <td>$${item.total.toFixed(0)}</td>
+          <td style="text-align:left; white-space:nowrap;">${item.onStand
+            ? `<span class="in-range-tag">✓ On stand</span>`
+            : `<button class="add-range-btn gap-style acc-add-stand" data-sku="${esc(item.stockcode)}" data-desc="${esc(item.description || '')}">+ Add to stand</button>`}</td>
+          <td style="text-align:left; white-space:nowrap;">${orderButtonHtml(item.stockcode, item.description)}</td>
+        </tr>`
+      return `
+        <div class="detail-section">
+          <h2>Accessories purchase history ${gapCount > 0 ? `<span class="gap-badge">${gapCount} not on stand</span>` : ''}</h2>
+          ${items.length === 0
+            ? `<div class="placeholder-note">No accessories purchases in ${histYears[0]} or ${histYears[1]} for this account.</div>`
+            : `<div style="overflow-x:auto;">
+                <table class="wholegoods-table">
+                  <thead>
+                    <tr>
+                      <th>Stockcode</th><th>Description</th>
+                      ${histYears.map(y => `<th>${y}</th>`).join('')}
+                      <th>2yr Total</th><th style="text-align:left;">Stand</th><th style="text-align:left;">Order</th>
+                    </tr>
+                  </thead>
+                  <tbody>${items.map(rowHtml).join('')}</tbody>
+                </table>
+              </div>`}
+        </div>`
+    }
+
     content.innerHTML = `
       <div class="detail-section">
-        <h2>Cama Stand Stock <span class="acc-sub" id="standSummary" style="font-weight:400; margin-left:8px;"></span></h2>
+        <h2>Accessories <span class="acc-sub" id="standSummary" style="font-weight:400; margin-left:8px;"></span></h2>
         ${standRows.length === 0
           ? `<div class="placeholder-note">No stand lines for this dealer yet - add the first one below.</div>`
           : `<div class="stand-head"><div>Part no.</div><div>Description</div><div>Qty</div><div>Checked</div><div></div><div></div></div>${rowsHtml}`}
@@ -2429,7 +2487,8 @@
             <div class="stock-search-results" id="standResults" style="display:none;"></div>
           </div>
         </div>
-      </div>`
+      </div>
+      ${historySectionHtml()}`
     content.scrollTop = scrollTop
 
     function updateSummary() {
@@ -2513,6 +2572,9 @@
         delete standPendingRemoval[Number(btn.dataset.id)]
         renderStandStockPage(accno)
       })
+    })
+    content.querySelectorAll('.acc-add-stand').forEach(btn => {
+      btn.addEventListener('click', () => addStandLine(accno, btn.dataset.sku, btn.dataset.desc, { refocusSearch: false }))
     })
     content.querySelectorAll('.order-btn[data-ordersku]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -2810,7 +2872,7 @@
       }
     }
 
-    // Cama Stand Stock: if the stand tab was never opened, note how many
+    // Accessories: if the tab was never opened, note how many
     // lines this dealer's stand has so the email can say it wasn't checked.
     let standNotOpenedCount = 0
     if (!standVisited) {
