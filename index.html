@@ -1489,26 +1489,71 @@
       document.getElementById(`${formIdPrefix}SaveBtn`).addEventListener('click', async () => {
         const textarea = document.getElementById(`${formIdPrefix}Textarea`)
         const statusEl = document.getElementById(`${formIdPrefix}Status`)
-        const codes = textarea.value.split(/[\n,]/).map(s => s.trim()).filter(s => s.length > 0)
+        // One part number per line (or comma separated). Pasting from a
+        // spreadsheet can bring invisible non-breaking spaces along, so
+        // those are turned into ordinary spaces before trimming.
+        const codes = [...new Set(
+          textarea.value.split(/[\n,]/)
+            .map(s => s.replace(/[\u00A0\u200B-\u200D\uFEFF]/g, ' ').trim())
+            .filter(s => s.length > 0)
+        )]
         if (codes.length === 0) {
           statusEl.textContent = 'Paste at least one part number first.'
           return
         }
-        const okToReplace = await appConfirm({
-          title: `Replace the ${label} list?`,
-          message: `This replaces the entire list with the ${codes.length} part number${codes.length === 1 ? '' : 's'} you pasted. It can't be undone.`,
-          confirmLabel: 'Replace list',
-          cancelLabel: 'Cancel',
-        })
+
+        // Check every part number against the stock list first, so a typo
+        // is named here instead of failing the whole save with a database
+        // error. This also fixes harmless differences (capitals, spaces).
+        statusEl.textContent = 'Checking part numbers…'
+        let toSave = codes
+        let notFound = []
+        const { data: matches, error: matchError } = await supabase.rpc('match_stock_codes', { p_codes: codes })
+        if (!matchError && matches) {
+          const matched = new Set()
+          matches.forEach(m => { if (m.stockcode) matched.add(m.stockcode); else notFound.push(m.input) })
+          toSave = [...matched]
+        }
+        // (If that check isn't available, carry on as before - the database
+        // will still refuse any part number that isn't in the stock list.)
+        statusEl.textContent = ''
+
+        let okToReplace
+        if (notFound.length > 0 && toSave.length === 0) {
+          await appAlert(
+            `None of the ${codes.length} part number${codes.length === 1 ? '' : 's'} you pasted could be found in the stock list, so nothing was changed. Check for typos, or extra text on the same line as the part number.`,
+            'Part numbers not found')
+          return
+        } else if (notFound.length > 0) {
+          const items = notFound.slice(0, 15)
+          if (notFound.length > 15) items.push(`...and ${notFound.length - 15} more`)
+          okToReplace = await appConfirm({
+            title: `${notFound.length} part number${notFound.length === 1 ? '' : 's'} not found`,
+            message: `These aren't in the stock list, so they can't be saved as specials - check them for typos. Nothing has been changed yet.\n\nSave the other ${toSave.length} and replace the whole ${label} list with them?`,
+            items,
+            confirmLabel: `Replace with the other ${toSave.length}`,
+            cancelLabel: 'Go back and fix',
+            primary: 'cancel',
+          })
+        } else {
+          okToReplace = await appConfirm({
+            title: `Replace the ${label} list?`,
+            message: `This replaces the entire list with the ${toSave.length} part number${toSave.length === 1 ? '' : 's'} you pasted. It can't be undone.`,
+            confirmLabel: 'Replace list',
+            cancelLabel: 'Cancel',
+          })
+        }
         if (!okToReplace) return
 
         statusEl.textContent = 'Saving…'
         const { error: saveError } = await supabase.rpc('replace_monthly_specials', {
           p_accgroup: accgroup,
-          p_stockcodes: codes,
+          p_stockcodes: toSave,
         })
         if (saveError) {
-          statusEl.textContent = `Failed to save: ${saveError.message}`
+          statusEl.textContent = /monthly_specials_stockcode_fkey/.test(saveError.message)
+            ? "Not saved: one or more of those part numbers isn't in the stock list. The existing list hasn't been changed."
+            : `Failed to save: ${saveError.message}`
           return
         }
         renderSpecialsAdmin()
