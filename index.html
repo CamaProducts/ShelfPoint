@@ -297,6 +297,7 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .qty-step-btn:hover { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .toggle-switch input:disabled + .toggle-slider { opacity: 0.35; cursor: not-allowed; }
   .stock-line-qty {
     width: 54px; padding: 8px 4px; border: 1px solid var(--border); border-radius: 6px;
     font-size: 14px; text-align: center;
@@ -1894,6 +1895,12 @@
     // quantity is already 0 (0 -> 0) - without this, removing an item
     // that was already at zero was silently ignored at Send Report.
     if (entry.markedForRemoval) return 'updated'
+    if (entry.last_recorded_qty == null) {
+      // Never counted: no quantity entered yet = nothing to report. Ticking the
+      // toggle can't stand in for a count (it would record a false zero).
+      if (entry.qty == null || entry.qty === '') return 'untouched'
+      return 'updated'   // a first count has been entered
+    }
     if (Number(entry.qty) !== Number(entry.last_recorded_qty)) return 'updated'
     return entry.confirmed ? 'confirmed' : 'untouched'
   }
@@ -1951,11 +1958,17 @@
     const statusLabel = status === 'untouched' ? 'not checked' : status
     const qtyDecreased = !entry.isNew && entry.last_recorded_qty !== null &&
       Number(entry.qty) < Number(entry.last_recorded_qty)
-    const showRemoveOption = !entry.isNew && Number(entry.qty) === 0
+    // A line added from the dealer's range that nobody has counted yet has no
+    // "last recorded" figure, and its quantity box stays blank until the rep
+    // enters one - a blank is not a zero. The toggle waits for a quantity, and
+    // the remove / reason fields only appear for a real zero.
+    const neverCounted = !entry.isNew && entry.last_recorded_qty == null
+    const unknownQty = neverCounted && (entry.qty == null || entry.qty === '')
+    const showRemoveOption = !entry.isNew && !unknownQty && Number(entry.qty) === 0
     // The reason box shows for a drop in quantity, for any line marked for
     // removal, and for any existing line sitting at zero - so the rep can
     // say why it isn't being restocked without having to change anything.
-    const sittingAtZero = !entry.isNew && Number(entry.qty) === 0
+    const sittingAtZero = !entry.isNew && !unknownQty && Number(entry.qty) === 0
     const showNote = qtyDecreased || entry.markedForRemoval || sittingAtZero
     const notePlaceholder = entry.markedForRemoval
       ? 'Reason for removing this line (required)'
@@ -1971,15 +1984,15 @@
               <div class="stock-line-sub">${entry.description || ''}</div>
             </div>
             <div class="stock-line-controls">
-              <div class="stock-line-last">${entry.isNew ? 'New line' : `Last recorded: ${entry.last_recorded_qty}`}</div>
+              <div class="stock-line-last">${entry.isNew ? 'New line' : (neverCounted ? 'Not counted yet' : `Last recorded: ${entry.last_recorded_qty}`)}</div>
               <div class="qty-stepper">
                 <button class="qty-step-btn" data-id="${entry.id}" data-dir="-1">−</button>
-                <input class="stock-line-qty" type="number" min="0" data-id="${entry.id}" value="${entry.qty}">
+                <input class="stock-line-qty" type="number" min="0" data-id="${entry.id}" value="${unknownQty ? '' : entry.qty}" ${unknownQty ? 'placeholder="?"' : ''}>
                 <button class="qty-step-btn" data-id="${entry.id}" data-dir="1">+</button>
               </div>
               <div class="stock-line-status-tag">${statusLabel}</div>
               <label class="toggle-switch">
-                <input type="checkbox" ${entry.confirmed ? 'checked' : ''} data-id="${entry.id}" class="stock-toggle">
+                <input type="checkbox" ${entry.confirmed ? 'checked' : ''} ${unknownQty ? 'disabled title="Enter a quantity first"' : ''} data-id="${entry.id}" class="stock-toggle">
                 <span class="toggle-slider"></span>
               </label>
               ${orderButtonHtml(entry.sku, entry.description)}
@@ -2287,25 +2300,27 @@
       renderWholegoodsPage(accno, dealerName)
     }
 
+    // "Add to range" now means "put it on this dealer's checklist" - the
+    // checklist IS the range. The line is saved straight away (so the range
+    // status on the history updates and nothing is lost if the rep leaves
+    // without sending), as an uncounted line the rep can fill in whenever.
     content.querySelectorAll('.add-range-btn[data-stockcode]').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true
         btn.textContent = 'Adding…'
-        const { error } = await supabase.from('dealer_ranges').upsert(
-          { accno, stockcode: btn.dataset.stockcode, added_by: currentUserLabel, is_active: true },
-          { onConflict: 'accno,stockcode' }
-        )
+        const { brand, description } = splitBrandFromDescription(btn.dataset.description)
+        const { data, error } = await supabase.from('dealer_floor_stock').insert({
+          accno, brand, sku: btn.dataset.stockcode, description,
+          last_recorded_qty: null, last_recorded_date: null, is_active: true,
+        }).select().single()
         if (error) {
           btn.textContent = 'Failed — try again'
           btn.disabled = false
           return
         }
-        // Also add it as a new floor stock checklist line, since it's
-        // now part of the agreed range but has no prior recorded qty.
-        const newId = `new-${newLineSeq++}`
-        checklistState[newId] = {
-          id: newId, brand: '', sku: btn.dataset.stockcode, description: btn.dataset.description,
-          last_recorded_qty: null, qty: 0, confirmed: false, isNew: true, note: '',
+        checklistState[data.id] = {
+          id: data.id, brand: data.brand, sku: data.sku, description: data.description,
+          last_recorded_qty: null, qty: null, confirmed: false, isNew: false, note: '', markedForRemoval: false,
         }
         // Refresh the history data (range status) without wiping checklist edits
         const { data: historyRows } = await supabase.rpc('get_wholegoods_history', { p_accno: accno })
@@ -2984,21 +2999,22 @@
     const allChecked = confirmed.concat(updated).concat(newLines)
     body += `STOCK CHECK (${allChecked.length} item${allChecked.length === 1 ? '' : 's'} checked):\n`
     confirmed.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''}: ${e.qty} (confirmed${e.note ? ' - ' + e.note : ''})\n` })
+    const prevQty = (e) => e.last_recorded_qty == null ? 'not counted before' : e.last_recorded_qty
     updated.forEach(e => {
       const isDecrease = Number(e.qty) < Number(e.last_recorded_qty)
       if (e.markedForRemoval) {
-        body += `- ${e.brand || ''} ${e.sku || ''}: ${e.last_recorded_qty} → 0 (REMOVED FROM CHECKLIST - ${e.note})\n`
+        body += `- ${e.brand || ''} ${e.sku || ''}: ${prevQty(e)} → 0 (REMOVED FROM CHECKLIST - ${e.note})\n`
       } else if (isDecrease && e.note) {
-        body += `- ${e.brand || ''} ${e.sku || ''}: ${e.last_recorded_qty} → ${e.qty} (${e.note})\n`
+        body += `- ${e.brand || ''} ${e.sku || ''}: ${prevQty(e)} → ${e.qty} (${e.note})\n`
       } else {
-        body += `- ${e.brand || ''} ${e.sku || ''}: ${e.last_recorded_qty} → ${e.qty} (updated)\n`
+        body += `- ${e.brand || ''} ${e.sku || ''}: ${prevQty(e)} → ${e.qty} (updated)\n`
       }
     })
     newLines.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''} ${e.description || ''}: ${e.qty} (new)\n` })
     if (allChecked.length === 0) body += `(none)\n`
     if (unchecked.length > 0) {
       body += `\nNOT CHECKED (${unchecked.length}):\n`
-      unchecked.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''} (last recorded: ${e.last_recorded_qty}${e.note ? ' - ' + e.note : ''})\n` })
+      unchecked.forEach(e => { body += `- ${e.brand || ''} ${e.sku || ''} (${e.last_recorded_qty == null ? 'not counted before' : 'last recorded: ' + e.last_recorded_qty}${e.note ? ' - ' + e.note : ''})\n` })
     } else if (checklistNeverOpened > 0) {
       body += `\nNOT CHECKED: the floor stock checklist was not opened (${checklistNeverOpened} item${checklistNeverOpened === 1 ? '' : 's'} on it).\n`
     }
