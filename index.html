@@ -506,6 +506,41 @@
   .group-picker-hint { font-size: 12px; color: var(--slate-dim); padding: 6px 8px 2px; }
 
   section#accountsView, section#detailView { height: 100%; display: flex; flex-direction: column; }
+
+  /* ---- Sales Reports (Admin) ---- */
+  .sr-tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .sr-tab { background: var(--paper); border: 1px solid var(--border); color: var(--slate); padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .sr-tab.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .sr-controls { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; font-size: 13px; color: var(--slate); }
+  .sr-controls label { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink); }
+  .sr-controls input, .sr-controls select { background: var(--paper); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 14px; color: var(--ink); }
+  .sr-card { background: var(--paper); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .sr-scroll { overflow-x: auto; }
+  .sr-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .sr-table th { background: var(--navy); color: #fff; font-weight: 600; padding: 9px 12px; text-align: center; border-left: 1px solid rgba(255,255,255,0.18); }
+  .sr-table th:first-child { border-left: none; }
+  .sr-table th.sr-num { text-align: right; }
+  .sr-table td { padding: 10px 12px; border-top: 1px solid var(--border); }
+  .sr-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sr-name { font-weight: 600; white-space: nowrap; }
+  .sr-ok { background: var(--ok-tint); color: var(--ok); font-weight: 600; }
+  .sr-bad { background: var(--err-tint); color: var(--err); font-weight: 600; }
+  .sr-ok-text { color: var(--ok); font-weight: 600; }
+  .sr-bad-text { color: var(--err); font-weight: 600; }
+  .sr-target { color: var(--ink); }
+  .sr-units { font-weight: 500; opacity: 0.85; }
+  .sr-muted { color: var(--slate-dim); font-size: 12px; }
+  .sr-total td { border-top: 2px solid var(--navy); background: var(--surface); font-weight: 700; }
+  .sr-total td.sr-ok { background: var(--ok-tint); }
+  .sr-total td.sr-bad { background: var(--err-tint); }
+  .sr-note { margin-top: 12px; font-size: 12px; color: var(--slate); line-height: 1.5; max-width: 900px; }
+  .sr-error { background: var(--err-tint); color: var(--err); border-radius: 10px; padding: 14px 16px; font-size: 14px; }
+  .sr-targets td { padding: 6px 6px; }
+  .sr-input { width: 92px; text-align: right; background: var(--paper); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--ink); }
+  .sr-input:focus { outline: 2px solid var(--navy); outline-offset: -1px; }
+  .sr-input.sr-changed { border-color: var(--lime-dark); background: rgba(181,211,52,0.14); }
+  .sr-btn { background: var(--navy); color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .sr-btn:hover { background: var(--navy-dark); }
 </style>
 </head>
 <body>
@@ -910,6 +945,7 @@
       <div class="nav-item" id="navStockLookup">Stock Lookup</div>
       ${currentIsManager ? `<div class="nav-item" id="navStockOuts">Stock-outs</div>` : ''}
       ${currentIsManager ? `<div class="nav-item" id="navSpecials">Specials</div>` : ''}
+      ${currentIsManager ? `<div class="nav-item" id="navReports">Sales Reports</div>` : ''}
     `)
     wireLogout()
     document.getElementById('navMyDealers').onclick = () => {
@@ -921,6 +957,7 @@
     document.getElementById('navStockLookup').onclick = () => renderStockLookup()
     if (currentIsManager) document.getElementById('navStockOuts').onclick = () => renderStockOuts()
     if (currentIsManager) document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
+    if (currentIsManager) document.getElementById('navReports').onclick = () => renderSalesReports()
 
     topbarTitle.textContent = 'Accounts'
     topbarSubtitle.textContent = `${sorted.length} account${sorted.length === 1 ? '' : 's'}`
@@ -1165,6 +1202,7 @@
         <div class="nav-item active" id="navStockLookup">Stock Lookup</div>
         ${currentIsManager ? `<div class="nav-item" id="navStockOuts">Stock-outs</div>` : ''}
         ${currentIsManager ? `<div class="nav-item" id="navSpecials">Specials</div>` : ''}
+        ${currentIsManager ? `<div class="nav-item" id="navReports">Sales Reports</div>` : ''}
       `)
       wireLogout()
       document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
@@ -1172,6 +1210,7 @@
       document.getElementById('navStockLookup').onclick = () => renderStockLookup()
       if (currentIsManager) document.getElementById('navStockOuts').onclick = () => renderStockOuts()
       if (currentIsManager) document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
+      if (currentIsManager) document.getElementById('navReports').onclick = () => renderSalesReports()
     }
 
     topbarTitle.textContent = 'Stock Lookup'
@@ -1262,6 +1301,7 @@
       <div class="nav-item" id="navStockLookup">Stock Lookup</div>
       <div class="nav-item active" id="navStockOuts">Stock-outs</div>
       <div class="nav-item" id="navSpecials">Specials</div>
+      <div class="nav-item" id="navReports">Sales Reports</div>
     `)
     wireLogout()
     document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
@@ -1269,6 +1309,7 @@
     document.getElementById('navStockLookup').onclick = () => renderStockLookup()
     document.getElementById('navStockOuts').onclick = () => renderStockOuts()
     document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
+    document.getElementById('navReports').onclick = () => renderSalesReports()
 
     const listHeaderRow = document.getElementById('listHeaderRow')
     listHeaderRow.style.display = 'none'
@@ -1428,6 +1469,7 @@
       <div class="nav-item" id="navStockLookup">Stock Lookup</div>
       <div class="nav-item" id="navStockOuts">Stock-outs</div>
       <div class="nav-item active" id="navSpecials">Specials</div>
+      <div class="nav-item" id="navReports">Sales Reports</div>
     `)
     wireLogout()
     document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
@@ -1435,6 +1477,7 @@
     document.getElementById('navStockLookup').onclick = () => renderStockLookup()
     document.getElementById('navStockOuts').onclick = () => renderStockOuts()
     document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
+    document.getElementById('navReports').onclick = () => renderSalesReports()
 
     topbarTitle.textContent = 'Monthly Specials'
     topbarSubtitle.textContent = 'Standard and hire lists'
@@ -1562,6 +1605,247 @@
     }
     wireSaveButton(1, 'standard', 'Standard Specials')
     wireSaveButton(3, 'hire', 'Hire Specials')
+  }
+
+  // ===================================================================
+  // SALES REPORTS (Admin only) - Weekly actual vs target + Targets entry
+  // ===================================================================
+  let srTab = 'weekly'          // 'weekly' | 'targets'
+  let srWeekEnd = null          // YYYY-MM-DD (a Thursday)
+  let srFyStart = null          // FY start year, e.g. 2026 = Apr 2026 - Mar 2027
+
+  const SR_TARGET_CATS = [
+    ['parts', 'Parts'],
+    ['greenworks_82v', 'Greenworks 82V'],
+    ['greenworks_60v', 'Greenworks 60V'],
+    ['echo_shindaiwa', 'Echo/Shindaiwa'],
+    ['atex', 'Atex'],
+  ]
+  const SR_MONTHS = ['Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar']
+
+  function srIso(d) {
+    const p = n => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+  }
+  function srLastThursday() {
+    const d = new Date()
+    while (d.getDay() !== 4) d.setDate(d.getDate() - 1)
+    return srIso(d)
+  }
+  function srCurrentFy() {
+    const d = new Date()
+    return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1
+  }
+  const srMoney = n => (n < 0 ? '-$' : '$') + Math.abs(Math.round(Number(n))).toLocaleString('en-NZ')
+  const srDateLabel = iso => new Date(iso + 'T12:00:00').toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+
+  function srNavAndChrome() {
+    sidebar.innerHTML = sidebarChrome(`
+      <div class="nav-item" id="navMyDealers">My Dealers</div>
+      <div class="nav-item" id="navAllDealers">All Dealers</div>
+      <div class="nav-item" id="navStockLookup">Stock Lookup</div>
+      <div class="nav-item" id="navStockOuts">Stock-outs</div>
+      <div class="nav-item" id="navSpecials">Specials</div>
+      <div class="nav-item active" id="navReports">Sales Reports</div>
+    `)
+    wireLogout()
+    document.getElementById('navMyDealers').onclick = () => { repFilter = String(currentStaffno); renderAccountsList() }
+    document.getElementById('navAllDealers').onclick = () => { repFilter = 'all'; renderAccountsList() }
+    document.getElementById('navStockLookup').onclick = () => renderStockLookup()
+    document.getElementById('navStockOuts').onclick = () => renderStockOuts()
+    document.getElementById('navSpecials').onclick = () => renderSpecialsAdmin()
+    document.getElementById('navReports').onclick = () => renderSalesReports()
+  }
+
+  async function renderSalesReports() {
+    // Admin only - same rule as Stock-outs and Specials
+    if (!currentIsManager) { renderAccountsList(); return }
+    document.getElementById('listHeaderRow').style.display = 'none'
+    srNavAndChrome()
+
+    if (!srWeekEnd) srWeekEnd = srLastThursday()
+    if (!srFyStart) srFyStart = srCurrentFy()
+
+    topbarTitle.textContent = 'Sales Reports'
+    topbarSubtitle.textContent = srTab === 'weekly' ? 'Weekly actual vs target' : 'Monthly targets'
+    topbarRight.innerHTML = ''
+
+    content.innerHTML = `
+      <div class="sr-tabs">
+        <button class="sr-tab ${srTab === 'weekly' ? 'active' : ''}" id="srTabWeekly">Weekly report</button>
+        <button class="sr-tab ${srTab === 'targets' ? 'active' : ''}" id="srTabTargets">Targets</button>
+      </div>
+      <div id="srBody"><div class="empty-state">Loading…</div></div>
+    `
+    document.getElementById('srTabWeekly').onclick = () => { srTab = 'weekly'; renderSalesReports() }
+    document.getElementById('srTabTargets').onclick = () => { srTab = 'targets'; renderSalesReports() }
+
+    if (srTab === 'weekly') await srRenderWeekly()
+    else await srRenderTargets()
+  }
+
+  // ---------- Weekly: actual vs target ----------
+  async function srRenderWeekly() {
+    const body = document.getElementById('srBody')
+    const { data, error } = await supabase.rpc('report_target_table', { p_week_end: srWeekEnd })
+    if (error) {
+      body.innerHTML = `<div class="sr-error">Could not load the report: ${error.message}<br>
+        <span class="sr-muted">If this says the function does not exist, the Step 1 SQL has not been run in Supabase yet.</span></div>`
+      return
+    }
+    const rows = data || []
+    if (rows.length === 0) {
+      body.innerHTML = `<div class="sr-error">No data returned. This screen is for Admin users only.</div>`
+      return
+    }
+
+    const wkFrom = new Date(srWeekEnd + 'T12:00:00'); wkFrom.setDate(wkFrom.getDate() - 6)
+    const monthStart = srWeekEnd.slice(0, 8) + '01'
+
+    // green = at/above target, red = below. No target (Stiga) = always green.
+    const cell = (actual, target, units) => {
+      const a = Number(actual || 0)
+      const hasT = target !== null && target !== undefined
+      const ok = !hasT || a >= Number(target)
+      const u = units !== null && units !== undefined ? ` <span class="sr-units">(${Math.round(units)} units)</span>` : ''
+      return `<td class="sr-num ${ok ? 'sr-ok' : 'sr-bad'}">${srMoney(a)}${u}</td>`
+    }
+    const tgt = t => `<td class="sr-num sr-target">${t === null || t === undefined ? '<span class="sr-muted">no target</span>' : srMoney(t)}</td>`
+    const pct = (a, t) => {
+      if (t === null || t === undefined || Number(t) === 0) return `<td class="sr-num sr-muted">—</td>`
+      const v = (Number(a || 0) / Number(t)) * 100
+      return `<td class="sr-num ${v >= 100 ? 'sr-ok-text' : 'sr-bad-text'}">${v.toFixed(0)}%</td>`
+    }
+
+    const trs = rows.map(r => `
+      <tr class="${r.category === 'total' ? 'sr-total' : ''}">
+        <td class="sr-name">${r.label}</td>
+        ${cell(r.wk_actual, r.wk_target, r.wk_units)}${tgt(r.wk_target)}${pct(r.wk_actual, r.wk_target)}
+        ${cell(r.mtd_actual, r.mtd_target, r.mtd_units)}${tgt(r.mtd_target)}${pct(r.mtd_actual, r.mtd_target)}
+        <td class="sr-num sr-target">${r.month_target === null ? '<span class="sr-muted">—</span>' : srMoney(r.month_target)}</td>
+      </tr>`).join('')
+
+    body.innerHTML = `
+      <div class="sr-controls">
+        <label>Week ending (Thursday)
+          <input type="date" id="srWeekEnd" value="${srWeekEnd}">
+        </label>
+        <span class="sr-muted">Week: ${srDateLabel(srIso(wkFrom))} to ${srDateLabel(srWeekEnd)} · Month to date from ${srDateLabel(monthStart)}</span>
+      </div>
+      <div class="sr-card">
+        <table class="sr-table">
+          <thead>
+            <tr><th rowspan="2"></th><th colspan="3">Weekly</th><th colspan="3">Month to date</th><th rowspan="2" class="sr-num">Full month target</th></tr>
+            <tr><th class="sr-num">Actual</th><th class="sr-num">Target</th><th class="sr-num">%</th><th class="sr-num">Actual</th><th class="sr-num">Target</th><th class="sr-num">%</th></tr>
+          </thead>
+          <tbody>${trs}</tbody>
+        </table>
+      </div>
+      <div class="sr-note">
+        Sales are ex-GST, by invoice date. Tradesmart is excluded. Targets are spread across Monday–Friday trading days, excluding NZ public holidays.
+        Units for Echo/Shindaiwa and Atex are estimated from dollars at the 6-month average price.
+        Stiga counts toward Total Sales but has no target. Data refreshes at 8am on weekdays, so it is never live.
+      </div>
+    `
+    document.getElementById('srWeekEnd').onchange = (e) => {
+      const v = e.target.value
+      if (!v) return
+      // snap to the Thursday on or before the chosen date
+      const d = new Date(v + 'T12:00:00')
+      while (d.getDay() !== 4) d.setDate(d.getDate() - 1)
+      srWeekEnd = srIso(d)
+      renderSalesReports()
+    }
+  }
+
+  // ---------- Targets entry ----------
+  async function srRenderTargets() {
+    const body = document.getElementById('srBody')
+    const from = `${srFyStart}-04-01`
+    const to = `${srFyStart + 1}-04-01`
+    const { data, error } = await supabase
+      .from('sales_targets').select('month, category, target')
+      .gte('month', from).lt('month', to)
+    if (error) {
+      body.innerHTML = `<div class="sr-error">Could not load targets: ${error.message}</div>`
+      return
+    }
+    const existing = {}
+    ;(data || []).forEach(r => { existing[`${r.month}|${r.category}`] = Number(r.target) })
+
+    const monthKeys = SR_MONTHS.map((_, i) => {
+      const m = ((3 + i) % 12) + 1
+      const y = m >= 4 ? srFyStart : srFyStart + 1
+      return `${y}-${String(m).padStart(2, '0')}-01`
+    })
+
+    const head = `<tr><th></th>${SR_MONTHS.map(m => `<th class="sr-num">${m}</th>`).join('')}<th class="sr-num">Year</th></tr>`
+    const catRows = SR_TARGET_CATS.map(([cat, label]) => `
+      <tr>
+        <td class="sr-name">${label}</td>
+        ${monthKeys.map(mk => {
+          const v = existing[`${mk}|${cat}`] ?? 0
+          return `<td><input class="sr-input" type="number" min="0" step="1" data-m="${mk}" data-c="${cat}" data-orig="${v}" value="${v}"></td>`
+        }).join('')}
+        <td class="sr-num sr-rowtotal" data-rowtotal="${cat}">0</td>
+      </tr>`).join('')
+    const totalRow = `
+      <tr class="sr-total">
+        <td class="sr-name">Total Sales target</td>
+        ${monthKeys.map(mk => `<td class="sr-num" data-coltotal="${mk}">0</td>`).join('')}
+        <td class="sr-num" id="srGrand">0</td>
+      </tr>`
+
+    body.innerHTML = `
+      <div class="sr-controls">
+        <label>Financial year
+          <select id="srFy">
+            ${[srFyStart - 1, srFyStart, srFyStart + 1].map(y => `<option value="${y}" ${y === srFyStart ? 'selected' : ''}>${y}/${String(y + 1).slice(2)} (Apr ${y} – Mar ${y + 1})</option>`).join('')}
+          </select>
+        </label>
+        <button class="sr-btn" id="srSave">Save targets</button>
+        <span id="srSaveMsg" class="sr-muted"></span>
+      </div>
+      <div class="sr-card sr-scroll">
+        <table class="sr-table sr-targets">
+          <thead>${head}</thead>
+          <tbody>${catRows}${totalRow}</tbody>
+        </table>
+      </div>
+      <div class="sr-note">Enter whole dollars, ex-GST. Total Sales target is the sum of the five rows above. Stiga has no target. Weekly targets are worked out from these monthly figures automatically.</div>
+    `
+
+    const recalc = () => {
+      let grand = 0
+      const colTotals = {}, rowTotals = {}
+      body.querySelectorAll('.sr-input').forEach(inp => {
+        const v = Number(inp.value) || 0
+        colTotals[inp.dataset.m] = (colTotals[inp.dataset.m] || 0) + v
+        rowTotals[inp.dataset.c] = (rowTotals[inp.dataset.c] || 0) + v
+        grand += v
+        inp.classList.toggle('sr-changed', String(Number(inp.value) || 0) !== inp.dataset.orig)
+      })
+      body.querySelectorAll('[data-coltotal]').forEach(td => { td.textContent = Math.round(colTotals[td.dataset.coltotal] || 0).toLocaleString('en-NZ') })
+      body.querySelectorAll('[data-rowtotal]').forEach(td => { td.textContent = Math.round(rowTotals[td.dataset.rowtotal] || 0).toLocaleString('en-NZ') })
+      document.getElementById('srGrand').textContent = Math.round(grand).toLocaleString('en-NZ')
+    }
+    body.querySelectorAll('.sr-input').forEach(inp => inp.addEventListener('input', recalc))
+    recalc()
+
+    document.getElementById('srFy').onchange = (e) => { srFyStart = parseInt(e.target.value, 10); renderSalesReports() }
+    document.getElementById('srSave').onclick = async () => {
+      const msg = document.getElementById('srSaveMsg')
+      const changed = [...body.querySelectorAll('.sr-input')]
+        .filter(inp => String(Number(inp.value) || 0) !== inp.dataset.orig)
+        .map(inp => ({ month: inp.dataset.m, category: inp.dataset.c, target: Number(inp.value) || 0, updated_at: new Date().toISOString(), updated_by: currentStaffno }))
+      if (changed.length === 0) { msg.textContent = 'No changes to save.'; return }
+      msg.textContent = 'Saving…'
+      const { error: upErr } = await supabase.from('sales_targets').upsert(changed, { onConflict: 'month,category' })
+      if (upErr) { msg.textContent = ''; msg.innerHTML = `<span class="sr-bad-text">Save failed: ${upErr.message}</span>`; return }
+      body.querySelectorAll('.sr-input').forEach(inp => { inp.dataset.orig = String(Number(inp.value) || 0) })
+      recalc()
+      msg.textContent = `Saved ${changed.length} change${changed.length === 1 ? '' : 's'}.`
+    }
   }
 
   async function showAccountDetail(accno) {
