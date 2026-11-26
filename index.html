@@ -452,13 +452,6 @@
   .recent-call-card:last-child { border-bottom: none; }
   .recent-call-meta { font-size: 12px; color: var(--slate-dim); margin-bottom: 4px; }
   .recent-call-notes { font-size: 13px; white-space: pre-wrap; }
-  /* Previous call notes: one tile that scrolls through the dealer's whole
-     history, newest first, instead of showing only the last call. */
-  .call-history-scroll {
-    max-height: 340px; overflow-y: auto; -webkit-overflow-scrolling: touch;
-    border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; background: var(--paper);
-  }
-  .call-history-scroll .recent-call-card { padding: 12px 0; }
   .notes-textarea {
     width: 100%; min-height: 100px; padding: 10px 12px; border: 1px solid var(--border);
     border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;
@@ -548,6 +541,10 @@
   .sr-input.sr-changed { border-color: var(--lime-dark); background: rgba(181,211,52,0.14); }
   .sr-btn { background: var(--navy); color: #fff; border: none; border-radius: 8px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .sr-btn:hover { background: var(--navy-dark); }
+  .sr-testbox { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--slate); font-weight: 600; cursor: pointer; }
+  .sr-btn:disabled { opacity: 0.55; cursor: default; }
+  .sr-sendmsg { font-size: 12px; color: var(--ok); max-width: 320px; }
+  .sr-testto { background: var(--paper); border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font-size: 12px; color: var(--ink); max-width: 210px; }
 </style>
 </head>
 <body>
@@ -1675,7 +1672,16 @@
 
     topbarTitle.textContent = 'Sales Reports'
     topbarSubtitle.textContent = srTab === 'weekly' ? 'Weekly actual vs target' : 'Monthly targets'
-    topbarRight.innerHTML = ''
+    topbarRight.innerHTML = `
+      <label class="sr-testbox"><input type="checkbox" id="srTestOnly" checked> Test: send only to</label>
+      <select id="srTestTo" class="sr-testto"><option value="">loading…</option></select>
+      <button class="sr-btn" id="srSendWeekly">Send Weekly Report</button>
+      <button class="sr-btn" id="srSendMonthly">Send Monthly Report</button>
+      <span id="srSendMsg" class="sr-sendmsg"></span>
+    `
+    srLoadTestRecipients()
+    document.getElementById('srSendWeekly').onclick = () => srSendReport('weekly')
+    document.getElementById('srSendMonthly').onclick = () => srSendReport('monthly')
 
     content.innerHTML = `
       <div class="sr-tabs">
@@ -1689,6 +1695,57 @@
 
     if (srTab === 'weekly') await srRenderWeekly()
     else await srRenderTargets()
+  }
+
+  async function srLoadTestRecipients() {
+    const sel = document.getElementById('srTestTo')
+    const { data, error } = await supabase.from('report_recipients').select('email').eq('is_active', true).order('email')
+    if (!sel) return
+    if (error || !data || data.length === 0) { sel.innerHTML = `<option value="">no recipients found</option>`; return }
+    const prefer = data.find(r => r.email.toLowerCase().startsWith('mark@')) || data[0]
+    sel.innerHTML = data.map(r => `<option value="${r.email}" ${r.email === prefer.email ? 'selected' : ''}>${r.email}</option>`).join('')
+  }
+
+  // ---------- Send a report by email (calls the send-sales-report function) ----------
+  async function srSendReport(type) {
+    const msg = document.getElementById('srSendMsg')
+    const test = document.getElementById('srTestOnly').checked
+    const btns = [document.getElementById('srSendWeekly'), document.getElementById('srSendMonthly')]
+    let who
+    const testTo = document.getElementById('srTestTo').value
+    if (test) {
+      if (!testTo) { msg.className = 'sr-sendmsg sr-bad-text'; msg.textContent = 'Choose a test address first.'; return }
+      who = `${testTo} only (this is a test)`
+    } else {
+      const { data, error } = await supabase.from('report_recipients').select('email').eq('is_active', true)
+      if (error) { msg.innerHTML = `<span class="sr-bad-text">Could not read the recipient list: ${error.message}</span>`; return }
+      who = (data || []).map(r => r.email).join(', ') || '(nobody)'
+    }
+    const todayIso = srIso(new Date())
+    const what = type === 'weekly'
+      ? `WEEKLY report, week ending ${srDateLabel(srWeekEnd)}`
+      : `MONTHLY report, as at ${srDateLabel(todayIso)}`
+    if (!window.confirm(`Send the ${what}\n\nTo: ${who}\n\nContinue?`)) return
+
+    btns.forEach(b => { b.disabled = true })
+    msg.className = 'sr-sendmsg'
+    msg.textContent = 'Sending…'
+    try {
+      const { data, error } = await supabase.functions.invoke('send-sales-report', {
+        body: { type, week_end: srWeekEnd, as_of: todayIso, test, test_to: testTo }
+      })
+      if (error) {
+        let detail = error.message
+        try { const j = await error.context.json(); if (j && j.error) detail = j.error } catch (e) {}
+        throw new Error(detail)
+      }
+      msg.textContent = `Sent${data.test ? ' (test)' : ''} to ${data.sent_to.join(', ')}`
+    } catch (e) {
+      msg.className = 'sr-sendmsg sr-bad-text'
+      msg.textContent = `Not sent: ${e.message}`
+    } finally {
+      btns.forEach(b => { b.disabled = false })
+    }
   }
 
   // ---------- Weekly: actual vs target ----------
@@ -1714,7 +1771,7 @@
       const a = Number(actual || 0)
       const hasT = target !== null && target !== undefined
       const ok = !hasT || a >= Number(target)
-      const u = units !== null && units !== undefined ? ` <span class="sr-units">(${Math.round(units)} units)</span>` : ''
+      const u = units !== null && units !== undefined ? ` <span class="sr-units">(${Math.round(units)} unit${Math.round(units) === 1 ? '' : 's'})</span>` : ''
       return `<td class="sr-num ${ok ? 'sr-ok' : 'sr-bad'}">${srMoney(a)}${u}</td>`
     }
     const tgt = t => `<td class="sr-num sr-target">${t === null || t === undefined ? '<span class="sr-muted">no target</span>' : srMoney(t)}</td>`
@@ -3000,29 +3057,18 @@
     content.innerHTML = `<div class="empty-state">Loading…</div>`
     const [
       { data: followups, error: followupsErr },
-      historyResult,
+      { data: recentCalls, error: callsErr },
     ] = await Promise.all([
       supabase.from('dealer_followups').select('*').eq('accno', accno).eq('is_resolved', false).order('created_at', { ascending: false }),
-      supabase.rpc('get_call_history', { p_accno: accno, p_limit: 100 }),
+      supabase.rpc('get_recent_call_notes', { p_accno: accno, p_limit: 1 }),
     ])
-    // Full history (EXO rep calls + ShelfPoint calls EXO doesn't have yet). If
-    // that function isn't installed yet, fall back to the last ShelfPoint call
-    // so the tab still works.
-    let recentCalls, callsErr = null
-    if (!historyResult.error) {
-      recentCalls = historyResult.data || []
-    } else {
-      const fb = await supabase.rpc('get_recent_call_notes', { p_accno: accno, p_limit: 1 })
-      callsErr = fb.error
-      recentCalls = (fb.data || []).map(c => ({ call_date: c.visit_date, rep_name: c.rep_name, note: c.call_notes }))
-    }
     if (followupsErr || callsErr) {
       const err = followupsErr || callsErr
       content.innerHTML = `<div class="empty-state">Couldn't load call notes: ${err.message}</div>`
       return
     }
     cachedFollowups = followups || []
-    cachedRecentCalls = recentCalls
+    cachedRecentCalls = recentCalls || []
     callNotesInitialized = true
     renderCallNotesPage(accno, dealer ? dealer.name : `Account #${accno}`)
   }
@@ -3045,16 +3091,14 @@
       </div>
     `).join('')
 
-    // Call notes are free text (EXO's can contain anything), so they're escaped.
-    const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const recentCallsHtml = cachedRecentCalls.length === 0
       ? `<div class="placeholder-note">No previous call notes recorded for this dealer.</div>`
-      : `<div class="call-history-scroll">${cachedRecentCalls.map(c => `
+      : cachedRecentCalls.map(c => `
           <div class="recent-call-card">
-            <div class="recent-call-meta">${formatNZDate(c.call_date)} · ${esc(c.rep_name || 'Unknown rep')}</div>
-            <div class="recent-call-notes">${c.note && c.note.trim() ? esc(c.note.trim()) : '(no notes written)'}</div>
+            <div class="recent-call-meta">${formatNZDate(c.visit_date)} · ${c.rep_name || 'Unknown rep'}</div>
+            <div class="recent-call-notes">${c.call_notes || '(no notes written)'}</div>
           </div>
-        `).join('')}</div>`
+        `).join('')
 
     const orderRowsHtml = currentOrderList.map((o, i) => `
       <tr>
@@ -3101,7 +3145,7 @@
         </div>
       </div>
       <div class="detail-section">
-        <h2>Previous call notes ${cachedRecentCalls.length > 1 ? `<span class="acc-sub" style="font-weight:400; margin-left:8px;">${cachedRecentCalls.length} calls · scroll for older</span>` : ''}</h2>
+        <h2>Last call notes</h2>
         ${recentCallsHtml}
       </div>
       <div class="detail-section">
