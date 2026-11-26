@@ -452,6 +452,13 @@
   .recent-call-card:last-child { border-bottom: none; }
   .recent-call-meta { font-size: 12px; color: var(--slate-dim); margin-bottom: 4px; }
   .recent-call-notes { font-size: 13px; white-space: pre-wrap; }
+  /* Previous call notes: one tile that scrolls through the dealer's whole
+     history, newest first, instead of showing only the last call. */
+  .call-history-scroll {
+    max-height: 340px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--border); border-radius: 8px; padding: 0 14px; background: var(--paper);
+  }
+  .call-history-scroll .recent-call-card { padding: 12px 0; }
   .notes-textarea {
     width: 100%; min-height: 100px; padding: 10px 12px; border: 1px solid var(--border);
     border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;
@@ -2993,18 +3000,29 @@
     content.innerHTML = `<div class="empty-state">Loading…</div>`
     const [
       { data: followups, error: followupsErr },
-      { data: recentCalls, error: callsErr },
+      historyResult,
     ] = await Promise.all([
       supabase.from('dealer_followups').select('*').eq('accno', accno).eq('is_resolved', false).order('created_at', { ascending: false }),
-      supabase.rpc('get_recent_call_notes', { p_accno: accno, p_limit: 1 }),
+      supabase.rpc('get_call_history', { p_accno: accno, p_limit: 100 }),
     ])
+    // Full history (EXO rep calls + ShelfPoint calls EXO doesn't have yet). If
+    // that function isn't installed yet, fall back to the last ShelfPoint call
+    // so the tab still works.
+    let recentCalls, callsErr = null
+    if (!historyResult.error) {
+      recentCalls = historyResult.data || []
+    } else {
+      const fb = await supabase.rpc('get_recent_call_notes', { p_accno: accno, p_limit: 1 })
+      callsErr = fb.error
+      recentCalls = (fb.data || []).map(c => ({ call_date: c.visit_date, rep_name: c.rep_name, note: c.call_notes }))
+    }
     if (followupsErr || callsErr) {
       const err = followupsErr || callsErr
       content.innerHTML = `<div class="empty-state">Couldn't load call notes: ${err.message}</div>`
       return
     }
     cachedFollowups = followups || []
-    cachedRecentCalls = recentCalls || []
+    cachedRecentCalls = recentCalls
     callNotesInitialized = true
     renderCallNotesPage(accno, dealer ? dealer.name : `Account #${accno}`)
   }
@@ -3027,14 +3045,16 @@
       </div>
     `).join('')
 
+    // Call notes are free text (EXO's can contain anything), so they're escaped.
+    const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     const recentCallsHtml = cachedRecentCalls.length === 0
       ? `<div class="placeholder-note">No previous call notes recorded for this dealer.</div>`
-      : cachedRecentCalls.map(c => `
+      : `<div class="call-history-scroll">${cachedRecentCalls.map(c => `
           <div class="recent-call-card">
-            <div class="recent-call-meta">${formatNZDate(c.visit_date)} · ${c.rep_name || 'Unknown rep'}</div>
-            <div class="recent-call-notes">${c.call_notes || '(no notes written)'}</div>
+            <div class="recent-call-meta">${formatNZDate(c.call_date)} · ${esc(c.rep_name || 'Unknown rep')}</div>
+            <div class="recent-call-notes">${c.note && c.note.trim() ? esc(c.note.trim()) : '(no notes written)'}</div>
           </div>
-        `).join('')
+        `).join('')}</div>`
 
     const orderRowsHtml = currentOrderList.map((o, i) => `
       <tr>
@@ -3081,7 +3101,7 @@
         </div>
       </div>
       <div class="detail-section">
-        <h2>Last call notes</h2>
+        <h2>Previous call notes ${cachedRecentCalls.length > 1 ? `<span class="acc-sub" style="font-weight:400; margin-left:8px;">${cachedRecentCalls.length} calls · scroll for older</span>` : ''}</h2>
         ${recentCallsHtml}
       </div>
       <div class="detail-section">
